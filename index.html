@@ -3,27 +3,29 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>수능 영단어 30일</title>
-<meta name="theme-color" content="#1f3a5f">
-<meta name="description" content="수능 필수 영단어 30일 완성 — 플래시카드, 퀴즈, 오답노트">
+<title>보키랑 영단어</title>
+<meta name="theme-color" content="#8f7cff">
+<meta name="description" content="중학~수능 영단어를 간격 반복으로 오래 기억하는 암기 앱">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="수능영단어">
+<meta name="apple-mobile-web-app-title" content="보키랑영단어">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header class="top">
   <button id="backBtn" class="icon-btn" aria-label="뒤로" hidden>‹</button>
-  <h1 id="title">수능 영단어 30일</h1>
+  <h1 id="title">수능 영단어</h1>
   <button id="searchBtn" class="icon-btn" aria-label="검색">⌕</button>
 </header>
 <main id="app"></main>
 <nav class="tabbar">
-  <button data-tab="home" class="on"><span>📚</span>학습</button>
-  <button data-tab="wrong"><span>📝</span>오답노트</button>
-  <button data-tab="stats"><span>📊</span>기록</button>
+  <button data-tab="today" class="on"><span>🏠</span>오늘</button>
+  <button data-tab="book"><span>📒</span>단어장</button>
+  <button data-tab="stats"><span>🌳</span>내 정원</button>
 </nav>
 <div id="toast"></div>
 <script src="words.js"></script>

@@ -1,59 +1,175 @@
-/* 수능 영단어 30일 — 정적 웹앱 (진도는 이 기기 브라우저에 저장) */
+/* 수능 영단어 — 간격 반복 암기 웹앱 (기록은 이 기기 브라우저에 저장) */
 (() => {
-  const DAYS = 30;
   const POS = { n: '명', v: '동', a: '형', ad: '부', conj: '접' };
-  const SPLIT = WORDS.findIndex(w => w[0] === 'abolish'); // 이 앞: 기본·실력 / 이 뒤: 고난도
+  const SET_SIZE = 40;
+  // 상자(box)별 다음 복습까지 걸리는 날 수
+  const INTERVAL = [0, 1, 3, 7, 15, 30, 60, 120, 240];
+  const MAXBOX = INTERVAL.length - 1;
+  const LEVEL = ['중학', '고등 기본', '수능 실력', '수능 고난도'];
 
-  // 결정적 셔플(매번 같은 순서) — Day마다 알파벳이 섞이도록
-  function seeded(seed) { return () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; }; }
   function shuffleWith(arr, rnd) { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
-  const ordered = [
-    ...shuffleWith(WORDS.slice(0, SPLIT), seeded(7)),
-    ...shuffleWith(WORDS.slice(SPLIT), seeded(11)),
-  ].map(([w, p, m]) => ({ w, p, m }));
-  const byWord = Object.fromEntries(ordered.map(o => [o.w, o]));
-  const dayList = [];
-  for (let d = 0; d < DAYS; d++) {
-    const s = Math.round(ordered.length * d / DAYS), e = Math.round(ordered.length * (d + 1) / DAYS);
-    dayList.push(ordered.slice(s, e));
-  }
-  const level = d => d < 10 ? '기본' : d < 20 ? '실력' : '고난도';
+  const shuffle = a => shuffleWith(a, Math.random);
+  const pick = a => a[Math.floor(Math.random() * a.length)];
 
-  // 저장소
-  const KEY = 'suneung-voca-v1';
-  const blank = { known: {}, wrong: {}, days: [], hide: false };
-  let S;
-  try { S = Object.assign({}, blank, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch { S = { ...blank }; }
-  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {} };
-  const today = () => { const t = new Date(); return `${t.getFullYear()}-${t.getMonth() + 1}-${t.getDate()}`; };
-  function studied() { const t = today(); if (!S.days.includes(t)) { S.days.push(t); } save(); }
-  function markKnown(w) { S.known[w] = 1; studied(); }
-  function markWrong(w) { S.wrong[w] = Math.min((S.wrong[w] || 0) + 2, 4); delete S.known[w]; studied(); }
+  // words.js는 쉬운 단어부터 정렬되어 있어요
+  const ordered = WORDS.map(([w, p, m, lv], i) => ({ w, p, m, lv, i }));
+  const byWord = Object.fromEntries(ordered.map(o => [o.w, o]));
+  const sets = []; for (let i = 0; i < ordered.length; i += SET_SIZE) sets.push(ordered.slice(i, i + SET_SIZE));
+  const setLevel = k => { const c = [0, 0, 0, 0]; sets[k].forEach(o => c[o.lv]++); return LEVEL[c.indexOf(Math.max(...c))]; };
+
+  // 마스코트 '보키' (부엉이)
+  const BOKI = `<svg viewBox="0 0 100 100" class="boki-svg" aria-hidden="true"><path d="M22 34 L30 14 L42 30 Z M78 34 L70 14 L58 30 Z" fill="#e0a93f"/><ellipse cx="50" cy="58" rx="34" ry="36" fill="#f6c768"/><ellipse cx="50" cy="70" rx="20" ry="18" fill="#fbe3ad"/><circle cx="37" cy="48" r="12" fill="#fff"/><circle cx="63" cy="48" r="12" fill="#fff"/><circle cx="39" cy="50" r="6" fill="#1d2433"/><circle cx="61" cy="50" r="6" fill="#1d2433"/><circle cx="41" cy="48" r="2" fill="#fff"/><circle cx="63" cy="48" r="2" fill="#fff"/><path d="M45 58 L50 65 L55 58 Z" fill="#e07a2f"/><circle cx="27" cy="62" r="4" fill="#f4a39a" opacity=".7"/><circle cx="73" cy="62" r="4" fill="#f4a39a" opacity=".7"/></svg>`;
+  const boki = (msg, small) => `<div class="boki ${small ? 'small' : ''}">${BOKI}<div class="bubble">${msg}</div></div>`;
+  const CHEER_OK = ['정답! 👏', '오 잘한다!', '완벽해요 ✨', '바로 그거야!', '기억력 최고!', '좋아요 👍'];
+  const CHEER_NG = ['괜찮아요, 다시 나올 거예요', '틀려도 돼요! 이렇게 외우는 거예요', '한 번 더 보면 기억나요', '아깝다! 다음엔 맞힐 수 있어요'];
+
+  // ── 저장 (사람마다 따로)
+  const PKEY = 'voca-profiles-v1';
+  let P; try { P = JSON.parse(localStorage.getItem(PKEY) || 'null'); } catch { P = null; }
+  if (!P) P = { list: [], cur: null };
+  if (!P.list.length) P.list = [
+    { id: 'seola', name: '홍설아', emoji: '🐰', course: '고등학생', start: 0 },
+    { id: 'yeona', name: '홍연아', emoji: '🐣', course: '중학생', start: 0 },
+  ];
+  const saveP = () => { try { localStorage.setItem(PKEY, JSON.stringify(P)); } catch {} };
+  const KEY = () => 'voca-data-' + P.cur;
+  const fresh = () => ({ cards: {}, daily: 10, start: 0, days: [], newToday: { d: 0, n: 0 }, log: {}, xp: 0, badges: {}, st: { spell: 0, perfect: 0, match60: 0, sessions: 0, practice: 0, combo: 0 } });
+  let S = fresh();
+  function loadProfile() { const raw = localStorage.getItem(KEY()); try { S = Object.assign(fresh(), JSON.parse(raw || '{}')); } catch { S = fresh(); } if (!raw) { const p = P.list.find(x => x.id === P.cur); S.start = (p && p.start) || 0; } }
+  const me = () => P.list.find(p => p.id === P.cur);
+  if (P.cur && me()) loadProfile(); else P.cur = null;
+  const save = () => { if (!P.cur) return; try { localStorage.setItem(KEY(), JSON.stringify(S)); } catch {} };
+  const dayNum = (t = new Date()) => Math.floor((t.getTime() - t.getTimezoneOffset() * 60000) / 86400000);
+  const TODAY = () => dayNum();
+  function touch(kind) {
+    const t = TODAY();
+    if (!S.days.includes(t)) S.days.push(t);
+    S.log[t] = S.log[t] || { n: 0, r: 0, ok: 0, ng: 0 };
+    if (kind) S.log[t][kind]++;
+  }
+  const card = w => S.cards[w];
+  const stage = w => { const c = card(w); if (!c) return 0; return c.b <= 2 ? 1 : c.b <= 4 ? 2 : 3; };
+  const STAGE = ['🌰 씨앗', '🌱 새싹', '🌿 무럭무럭', '🌳 내 거!'];
+  const STAGE_C = ['#e3d7c6', '#a8e06a', '#4cc38a', '#2a9d6a'];
+
+  // 오늘의 학습에서 처음 답한 결과로 일정 갱신
+  function gradeReview(w, ok) {
+    const c = S.cards[w] || (S.cards[w] = { b: 0, d: TODAY(), l: 0 });
+    if (ok) { c.b = Math.min(c.b + 1, MAXBOX); c.d = TODAY() + INTERVAL[c.b]; touch('ok'); addXP(10); }
+    else { c.b = 1; c.d = TODAY() + 1; c.l = (c.l || 0) + 1; touch('ng'); }
+    save();
+  }
+  function learnNew(w) {
+    S.cards[w] = { b: 1, d: TODAY() + 1, l: 0 };
+    if (S.newToday.d !== TODAY()) S.newToday = { d: TODAY(), n: 0 };
+    S.newToday.n++; touch('n'); addXP(15); save();
+  }
+  // 자유 연습: 틀리면 하루 뒤 다시 나오게, 맞히면 일정 유지
+  function practiceResult(w, ok) {
+    touch(ok ? 'ok' : 'ng'); if (ok) addXP(3);
+    const c = card(w);
+    if (!ok && c) { c.b = Math.max(1, c.b - 1); c.d = Math.min(c.d, TODAY() + 1); c.l = (c.l || 0) + 1; }
+    save();
+  }
+  const dueList = () => ordered.filter(o => { const c = card(o.w); return c && c.d <= TODAY(); }).sort((a, b) => card(a.w).d - card(b.w).d);
+  const newLeft = () => Math.max(0, S.daily - (S.newToday.d === TODAY() ? S.newToday.n : 0));
+  const unseen = () => { const u = ordered.filter(o => !card(o.w)); return [...u.filter(o => o.lv >= S.start), ...u.filter(o => o.lv < S.start)]; };
+  const learned = () => ordered.filter(o => card(o.w));
   function streak() {
-    let n = 0; const d = new Date();
-    if (!S.days.includes(today())) d.setDate(d.getDate() - 1);
-    while (S.days.includes(`${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`)) { n++; d.setDate(d.getDate() - 1); }
+    let n = 0, d = TODAY();
+    if (!S.days.includes(d)) d--;
+    while (S.days.includes(d)) { n++; d--; }
     return n;
   }
 
-  // 발음
+
+  // ── 게임 요소: 경험치·레벨·배지
+  const TITLES = ['알', '아기 부엉이', '꼬마 탐험가', '단어 수집가', '단어 탐정', '단어 기사', '단어 마법사', '단어 박사', '단어 마스터', '전설의 부엉이'];
+  const xpFor = n => 30 * n * (n - 1); // 레벨 n이 되는 데 필요한 누적 경험치
+  const levelOf = xp => { let n = 1; while (xp >= xpFor(n + 1)) n++; return n; };
+  const titleOf = n => n <= TITLES.length ? TITLES[n - 1] : `${TITLES[TITLES.length - 1]} ${'★'.repeat(Math.min(5, n - TITLES.length))}`;
+  function addXP(n) {
+    const before = levelOf(S.xp || 0); S.xp = (S.xp || 0) + n; const after = levelOf(S.xp);
+    if (after > before) celebrate(`레벨 업! Lv.${after}`, `이제 '${titleOf(after)}'이에요!`, '⬆️');
+  }
+  const longCnt = () => ordered.filter(o => stage(o.w) === 3).length;
+  const BADGES = [
+    { id: 'first', icon: '🌱', name: '첫걸음', desc: '첫 단어 심기', ok: () => learned().length >= 1 },
+    { id: 'w50', icon: '📗', name: '단어 50', desc: '단어 50개 심기', ok: () => learned().length >= 50 },
+    { id: 'w100', icon: '📘', name: '단어 100', desc: '단어 100개 배우기', ok: () => learned().length >= 100 },
+    { id: 'w300', icon: '📙', name: '단어 300', desc: '단어 300개 배우기', ok: () => learned().length >= 300 },
+    { id: 'w700', icon: '🎓', name: '중학 단어 정복', desc: '중학 단어 모두 배우기', ok: () => ordered.filter(o => o.lv === 0).every(o => card(o.w)) },
+    { id: 'w1000', icon: '📚', name: '단어 1000', desc: '단어 1000개 배우기', ok: () => learned().length >= 1000 },
+    { id: 'all', icon: '👑', name: '전설의 단어장', desc: '모든 단어 배우기', ok: () => learned().length >= ordered.length },
+    { id: 'd3', icon: '🔥', name: '3일 연속', desc: '3일 연속 출석', ok: () => streak() >= 3 },
+    { id: 'd7', icon: '🔥', name: '일주일 연속', desc: '7일 연속 출석', ok: () => streak() >= 7 },
+    { id: 'd14', icon: '💪', name: '2주 연속', desc: '14일 연속 출석', ok: () => streak() >= 14 },
+    { id: 'd30', icon: '🏆', name: '한 달 연속', desc: '30일 연속 출석', ok: () => streak() >= 30 },
+    { id: 'l1', icon: '🌳', name: '첫 나무', desc: '🌳 내 거! 단어 1개', ok: () => longCnt() >= 1 },
+    { id: 'l50', icon: '🌲', name: '작은 숲', desc: '🌳 내 거! 단어 50개', ok: () => longCnt() >= 50 },
+    { id: 'l200', icon: '🏞️', name: '큰 숲', desc: '🌳 내 거! 단어 200개', ok: () => longCnt() >= 200 },
+    { id: 'c10', icon: '⚡', name: '10연속!', desc: '10문제 연속으로 맞히기', ok: () => S.st.combo >= 10 },
+    { id: 'c25', icon: '🌟', name: '25연속!', desc: '25문제 연속으로 맞히기', ok: () => S.st.combo >= 25 },
+    { id: 'perfect', icon: '💯', name: '퍼펙트', desc: '미션을 하나도 안 틀리고 끝내기', ok: () => S.st.perfect >= 1 },
+    { id: 'spell', icon: '✍️', name: '철자 장인', desc: '철자 쓰기 30번 맞히기', ok: () => S.st.spell >= 30 },
+    { id: 'match', icon: '🧩', name: '번개 손', desc: '짝 맞추기 12쌍 이상을 60초 안에', ok: () => S.st.match60 >= 1 },
+    { id: 'prac', icon: '🎯', name: '연습벌레', desc: '자유 연습 10번 끝내기', ok: () => S.st.practice >= 10 },
+    { id: 'lv5', icon: '🦉', name: '단어 탐정', desc: '레벨 5 달성', ok: () => levelOf(S.xp || 0) >= 5 },
+    { id: 'lv10', icon: '🦅', name: '전설의 부엉이', desc: '레벨 10 달성', ok: () => levelOf(S.xp || 0) >= 10 },
+  ];
+  function checkBadges() {
+    S.st = Object.assign({ spell: 0, perfect: 0, match60: 0, sessions: 0, practice: 0, combo: 0 }, S.st || {});
+    S.badges = S.badges || {};
+    for (const b of BADGES) if (!S.badges[b.id] && b.ok()) { S.badges[b.id] = TODAY(); addXP(20); celebrate(`스티커 획득! ${b.icon}`, `${b.name} — ${b.desc}`, b.icon); }
+    save();
+  }
+  // 축하 팝업 (여러 개면 차례로)
+  const popQ = []; let popOn = false;
+  function celebrate(title, body, icon) { popQ.push({ title, body, icon }); if (!popOn) nextPop(); }
+  function nextPop() {
+    const p = popQ.shift(); if (!p) { popOn = false; return; }
+    popOn = true; confetti();
+    const el = document.createElement('div'); el.className = 'pop';
+    el.innerHTML = `<div class="pop-card"><div class="pop-icon">${p.icon}</div><b>${p.title}</b><p>${p.body}</p><button class="btn accent">좋아요!</button></div>`;
+    document.body.appendChild(el);
+    el.querySelector('button').onclick = () => { el.remove(); nextPop(); };
+  }
+  function confetti() {
+    const box = document.createElement('div'); box.className = 'confetti';
+    const colors = ['#e8a33d', '#2d7fd0', '#1f8a5b', '#e0566b', '#f6c768', '#8b5cf6'];
+    for (let k = 0; k < 60; k++) {
+      const i = document.createElement('i');
+      i.style.cssText = `left:${Math.random() * 100}%;background:${pick(colors)};animation-delay:${Math.random() * .4}s;animation-duration:${1.4 + Math.random()}s;transform:rotate(${Math.random() * 360}deg)`;
+      box.appendChild(i);
+    }
+    document.body.appendChild(box); setTimeout(() => box.remove(), 2800);
+  }
+  let combo = 0;
+  function onAnswer(ok, mode) {
+    if (ok) { combo++; if (combo > (S.st.combo || 0)) S.st.combo = combo; if (mode === 'spell') S.st.spell++; }
+    else combo = 0;
+  }
+  const comboHTML = () => combo >= 3 ? `<span class="combo">🔥 ${combo}연속!</span>` : '';
+  
+
+  // ── 발음
+  const canSpeak = 'speechSynthesis' in window;
   let voice = null;
   function pickVoice() { const vs = speechSynthesis.getVoices(); voice = vs.find(v => /en-US/i.test(v.lang) && /Samantha|Google|Microsoft/i.test(v.name)) || vs.find(v => /^en/i.test(v.lang)) || null; }
-  if ('speechSynthesis' in window) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
+  if (canSpeak) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
   function speak(w) {
-    if (!('speechSynthesis' in window)) return toast('이 브라우저는 발음 듣기를 지원하지 않아요');
+    if (!canSpeak) return;
     speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(w); u.lang = 'en-US'; u.rate = .9; if (voice) u.voice = voice; speechSynthesis.speak(u);
   }
 
-  // UI 유틸
+  // ── 화면 유틸
   const $ = s => document.querySelector(s);
   const app = $('#app');
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   let toastT;
   function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 1600); }
-  const shuffle = a => shuffleWith(a, Math.random);
-  const knownIn = list => list.filter(o => S.known[o.w]).length;
   const posLabel = p => POS[p] || p;
+  const dot = w => `<i class="dot" style="background:${STAGE_C[stage(w)]}" title="${STAGE[stage(w)]}"></i>`;
 
   const stack = [];
   function go(view, ...args) { stack.push([view, args]); render(); }
@@ -61,7 +177,7 @@
   function root(view) { stack.length = 0; go(view); }
   function render() {
     const [view, args] = stack[stack.length - 1];
-    if ('speechSynthesis' in window) speechSynthesis.cancel();
+    if (canSpeak) speechSynthesis.cancel();
     $('#backBtn').hidden = stack.length <= 1;
     document.querySelectorAll('.tabbar button').forEach(b => b.classList.toggle('on', b.dataset.tab === stack[0][0].tab));
     window.scrollTo(0, 0);
@@ -69,199 +185,376 @@
   }
   const setTitle = t => { $('#title').textContent = t; };
 
-  // ── 홈
-  function Home() {
-    setTitle('수능 영단어 30일');
-    const total = ordered.length, k = Object.keys(S.known).filter(w => byWord[w]).length;
-    let next = dayList.findIndex(l => knownIn(l) < l.length); if (next < 0) next = 0;
-    const st = streak();
-    app.innerHTML = `
-      <section class="card hero">
-        <div class="row between"><span class="sub">외운 단어</span><span class="sub">${st ? `🔥 ${st}일 연속` : '오늘 첫 학습을 시작해요'}</span></div>
-        <div class="big">${k} <span style="font-size:18px;opacity:.8">/ ${total}</span></div>
-        <div class="bar" style="margin:10px 0 14px"><i style="width:${(k / total * 100).toFixed(1)}%"></i></div>
-        <button class="btn ghost" id="cont">Day ${next + 1} 이어서 공부하기 ›</button>
-      </section>
-      <h2>Day 선택</h2>
-      <div class="days">${dayList.map((l, i) => { const kn = knownIn(l); return `
-        <button class="day ${kn === l.length ? 'done' : ''}" data-d="${i}">
-          <b>Day ${i + 1}</b><small>${l.length}개 · ${level(i)}</small>
-          <div class="bar"><i style="width:${kn / l.length * 100}%"></i></div>
-        </button>`; }).join('')}</div>`;
-    $('#cont').onclick = () => go(Day, next);
-    app.querySelectorAll('.day').forEach(b => b.onclick = () => go(Day, +b.dataset.d));
+  // ── 문제 하나 그리기 (모드: intro / en / ko / listen / spell)
+  function choicesFor(o, field) {
+    let same = ordered.filter(x => x.w !== o.w && x.p === o.p && x.m !== o.m && x.lv === o.lv);
+    if (same.length < 3) same = ordered.filter(x => x.w !== o.w && x.p === o.p && x.m !== o.m);
+    const pool = shuffle(same.length >= 3 ? same : ordered.filter(x => x.w !== o.w));
+    const picks = []; for (const x of pool) { if (picks.length === 3) break; if (x[field] !== o[field] && !picks.some(p => p[field] === x[field])) picks.push(x); }
+    return shuffle([o, ...picks]);
   }
-  Home.tab = 'home';
+  const MODE_NAME = { intro: '✨ 새 단어', en: '🔤 뜻 고르기', ko: '🇰🇷 영어 고르기', listen: '🎧 듣고 고르기', spell: '✍️ 철자 쓰기' };
 
-  // ── Day 상세
-  function Day(d) {
-    setTitle(`Day ${d + 1}`);
-    const list = dayList[d];
+  function ask(host, o, mode, done) {
+    if (mode === 'listen' && !canSpeak) mode = 'en';
+    const finish = (ok, extra = '') => {
+      onAnswer(ok, mode);
+      if (ok) { const af = host.querySelector('.after'); if (af) af.innerHTML = `<p class="cheer">${pick(CHEER_OK)} ${comboHTML()}</p>`; setTimeout(() => done(true), mode === 'spell' ? 800 : 700); return; }
+      host.querySelector('.after').innerHTML = `<p class="cheer ng">${pick(CHEER_NG)}</p><p class="answer">${esc(o.w)} <span>${posLabel(o.p)}</span> = ${esc(o.m)}</p>${extra}<button class="btn next" id="nx">다음 ›</button>`;
+      host.querySelector('#nx').onclick = () => done(false);
+      host.querySelector('#nx').focus();
+    };
+    if (mode === 'intro') {
+      host.innerHTML = `<div class="flash" id="card"><div class="inner">
+          <div class="face"><span class="tag">✨ 새 단어</span><button class="say" id="say">🔊</button><div class="word">${esc(o.w)}</div><div class="pos">${posLabel(o.p)}</div><div class="hint">탭해서 뜻 보기</div></div>
+          <div class="face back"><span class="tag">✨ 새 단어</span><div class="word sm">${esc(o.w)}</div><div class="mean">${esc(o.m)}</div><div class="hint">소리 내어 3번 읽어 보세요</div></div>
+        </div></div><button class="btn" id="got">외웠어요 ›</button>`;
+      const c = host.querySelector('#card');
+      c.onclick = e => { if (e.target.id !== 'say') c.classList.toggle('flip'); };
+      host.querySelector('#say').onclick = () => speak(o.w);
+      host.querySelector('#got').onclick = () => { if (!c.classList.contains('flip')) { c.classList.add('flip'); return; } done(true); };
+      speak(o.w);
+      return;
+    }
+    if (mode === 'spell') {
+      host.innerHTML = `<span class="tag">${MODE_NAME.spell}</span>
+        <div class="q-word ko">${esc(o.m)}</div>
+        <div class="q-pos">${posLabel(o.p)} · ${o.w.length}글자</div><div class="hintline" id="hl"></div>
+        <input class="spell" id="sp" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="영어로 쓰세요">
+        <div class="btns3" style="margin-top:10px"><button class="btn light" id="giveup">몰라요</button><button class="btn light" id="hint">💡 힌트</button><button class="btn" id="chk">확인</button></div>
+        <div class="after"></div>`;
+      const inp = host.querySelector('#sp'); setTimeout(() => inp.focus(), 50);
+      let shown = 1; const hl = host.querySelector('#hl');
+      const drawHint = () => { hl.textContent = o.w.split('').map((c, k) => k < shown ? c : '_').join(' '); };
+      drawHint();
+      host.querySelector('#hint').onclick = () => { if (shown < o.w.length - 1) shown++; drawHint(); speak(o.w); inp.focus(); };
+      const check = giveup => {
+        const v = inp.value.trim().toLowerCase(); if (!v && !giveup) return;
+        inp.disabled = true; host.querySelector('.btns3').remove();
+        const ok = !giveup && v === o.w.toLowerCase();
+        inp.classList.add(ok ? 'ok' : 'ng'); speak(o.w);
+        finish(ok, ok || !v ? '' : `<p class="muted center">내 답: ${esc(v)}</p>`);
+      };
+      host.querySelector('#chk').onclick = () => check(false);
+      host.querySelector('#giveup').onclick = () => check(true);
+      inp.onkeydown = e => { if (e.key === 'Enter') check(false); };
+      return;
+    }
+    const showKo = mode === 'ko';
+    const opts = choicesFor(o, showKo ? 'w' : 'm');
+    const head = mode === 'listen'
+      ? `<button class="bigsay" id="say">🔊</button><div class="q-pos">잘 듣고 뜻을 고르세요</div>`
+      : showKo ? `<div class="q-word ko">${esc(o.m)}</div><div class="q-pos">${posLabel(o.p)}</div>`
+        : `<div class="q-word">${esc(o.w)}</div><div class="q-pos">${posLabel(o.p)} · <button class="toggle" id="say">🔊 듣기</button></div>`;
+    host.innerHTML = `<span class="tag">${MODE_NAME[mode]}</span>${head}
+      <div class="opts">${opts.map((x, n) => `<button class="opt" data-w="${esc(x.w)}"><span class="n">${n + 1}</span>${esc(showKo ? x.w : x.m)}</button>`).join('')}</div>
+      <div class="after"></div>`;
+    const say = host.querySelector('#say'); if (say) say.onclick = () => speak(o.w);
+    if (mode !== 'ko') speak(o.w);
+    host.querySelectorAll('.opt').forEach(b => b.onclick = () => {
+      const ok = b.dataset.w === o.w;
+      host.querySelectorAll('.opt').forEach(x => { x.disabled = true; if (x.dataset.w === o.w) x.classList.add('correct'); });
+      if (!ok) b.classList.add('wrong');
+      if (showKo) speak(o.w);
+      finish(ok);
+    });
+  }
+
+  // ── 오늘
+  function Today() {
+    setTitle(`${me().emoji} ${me().name}의 영단어`);
+    const due = dueList().length, nl = Math.min(newLeft(), unseen().length);
+    const total = ordered.length, lr = learned().length, lt = ordered.filter(o => stage(o.w) === 3).length;
+    const st = streak();
+    const tomorrow = ordered.filter(o => { const c = card(o.w); return c && c.d === TODAY() + 1; }).length;
+    const doneToday = due === 0 && nl === 0;
+    const hello = doneToday ? `${esc(me().name)}, 오늘 할 거 다 했어요! 진짜 멋져요 🎉`
+      : due === 0 && !learned().length ? `안녕 ${esc(me().name)}! 나는 보키야 🦉<br>하루 ${S.daily}개씩 천천히 같이 외워 보자!`
+      : pick([`${esc(me().name)}, 왔구나! 오늘도 조금만 해 보자`, `잊어버릴 때쯤 다시 보여 줄게. 그게 오래 기억하는 비법이야!`, `틀려도 괜찮아. 틀린 단어는 내가 다시 보여 줄게`, `딱 5분이면 돼요. 시작해 볼까?`]);
+    app.innerHTML = `${boki(hello)}
+      <section class="card hero">
+        <div class="lvbox"><div class="lvnum">Lv.${levelOf(S.xp || 0)}</div><div style="flex:1"><div class="row between"><b>${titleOf(levelOf(S.xp || 0))}</b><span class="sub">${st ? `🔥 ${st}일 연속` : ''}</span></div>
+          <div class="bar"><i style="width:${((S.xp || 0) - xpFor(levelOf(S.xp || 0))) / (xpFor(levelOf(S.xp || 0) + 1) - xpFor(levelOf(S.xp || 0))) * 100}%"></i></div>
+          <small class="sub">다음 레벨까지 ⭐ ${xpFor(levelOf(S.xp || 0) + 1) - (S.xp || 0)}</small></div></div>
+        <div class="row between" style="margin-top:14px"><span class="sub">오늘의 미션</span><span class="sub">🎀 스티커 ${Object.keys(S.badges || {}).length} / ${BADGES.length}</span></div>
+        ${doneToday ? `<div class="big">미션 완료! 🎉</div><p class="sub" style="margin:4px 0 14px">내일 다시 볼 단어 ${tomorrow}개가 기다려요.</p>
+          <button class="btn ghost" id="more">새 단어 10개 더 하기</button>`
+        : `<div class="todo"><div><b>${due}</b><span>🔁 다시 보기</span></div><div><b>${nl}</b><span>✨ 새 단어</span></div></div>
+          <button class="btn accent" id="start">미션 시작! ›</button>`}
+      </section>
+      <section class="card">
+        <div class="row between"><b>🌼 내 단어 정원</b><span class="muted">${lr} / ${total}개 심음</span></div>
+        <div class="stack-bar">${[3, 2, 1, 0].map(s => { const n = ordered.filter(o => stage(o.w) === s).length; return n ? `<i style="width:${n / total * 100}%;background:${STAGE_C[s]}"></i>` : ''; }).join('')}</div>
+        <div class="legend">${[0, 1, 2, 3].map(s => `<span><i class="dot" style="background:${STAGE_C[s]}"></i>${STAGE[s]} ${ordered.filter(o => stage(o.w) === s).length}</span>`).join('')}</div>
+        <p class="muted" style="margin:10px 0 0">단어를 맞힐 때마다 쑥쑥 자라요. 잊어버릴 때쯤 보키가 다시 물어봐 줄게요! (🌳 ${lt}그루)</p>
+      </section>
+      <section class="card">
+        <b>🎮 놀면서 외우기</b>
+        <div class="modes">${PRACTICE_MODES.map(m => `<button class="mode" data-m="${m.id}"><span>${m.icon}</span>${m.name}</button>`).join('')}</div>
+      </section>`;
+    const st0 = $('#start'); if (st0) st0.onclick = () => go(Session, false);
+    const mo = $('#more'); if (mo) mo.onclick = () => go(Session, true);
+    app.querySelectorAll('.mode').forEach(b => b.onclick = () => go(PracticeSource, b.dataset.m));
+  }
+  Today.tab = 'today';
+
+  // ── 오늘의 학습 세션
+  function reviewMode(o) {
+    const b = card(o.w).b;
+    if (b <= 1) return 'en';
+    if (b === 2) return pick(['en', 'en', 'listen']);
+    if (b === 3) return pick(['en', 'ko', 'listen']);
+    if (b === 4) return pick(['ko', 'listen', 'spell']);
+    return pick(['spell', 'ko', 'listen']);
+  }
+  function Session(extra) {
+    setTitle('오늘의 미션');
+    const due = dueList().slice(0, 150);
+    const nCount = extra ? 10 : Math.min(newLeft(), 60);
+    const news = unseen().slice(0, nCount);
+    // 큐: {o, mode, kind: 'review'|'intro'|'check'|'retry'}
+    let q = due.map(o => ({ o, mode: reviewMode(o), kind: 'review' }));
+    // 새 단어는 소개 → 몇 문제 뒤 확인 문제
+    const merged = []; let ri = 0;
+    news.forEach((o, k) => {
+      for (let t = 0; t < 2 && ri < q.length; t++) merged.push(q[ri++]);
+      merged.push({ o, mode: 'intro', kind: 'intro' });
+    });
+    while (ri < q.length) merged.push(q[ri++]);
+    q = merged;
+    const total = q.length + news.length;
+    let doneN = 0, okN = 0, ngN = 0; const wrongs = new Set(); combo = 0; let finished = false;
+    if (!q.length) { app.innerHTML = `<div class="empty"><div style="font-size:44px">🎉</div><p>지금은 할 학습이 없어요.</p></div>`; return; }
+
+    const next = () => {
+      checkBadges();
+      if (!q.length) return summary();
+      const it = q.shift();
+      app.innerHTML = `<div class="progress-top"><span>${doneN} / ${total}</span><span><button class="toggle" id="quit">쉬었다 하기</button></span></div>
+        <div class="bar"><i style="width:${doneN / total * 100}%"></i></div><div id="qhost" style="margin-top:12px"></div>`;
+      $('#quit').onclick = summary;
+      ask($('#qhost'), it.o, it.mode, ok => {
+        if (it.kind === 'intro') {
+          q.splice(Math.min(3, q.length), 0, { o: it.o, mode: 'en', kind: 'check' });
+          doneN++; return next();
+        }
+        if (it.kind === 'check') {
+          if (ok) { learnNew(it.o.w); doneN++; okN++; }
+          else { ngN++; wrongs.add(it.o.w); q.splice(Math.min(4, q.length), 0, { o: it.o, mode: 'intro', kind: 'intro' }); doneN--; }
+          return next();
+        }
+        if (it.kind === 'review') {
+          gradeReview(it.o.w, ok); doneN++;
+          if (ok) okN++; else { ngN++; wrongs.add(it.o.w); q.splice(Math.min(5, q.length), 0, { o: it.o, mode: 'en', kind: 'retry' }); }
+          return next();
+        }
+        // retry: 틀린 단어 다시 한 번 (일정에는 영향 없음)
+        if (!ok) q.push({ o: it.o, mode: 'en', kind: 'retry' });
+        next();
+      });
+    };
+    const summary = () => {
+      const list = [...wrongs].map(w => byWord[w]);
+      if (!q.length && !finished) { finished = true; S.st.sessions++; addXP(30); if (ngN === 0 && okN >= 10) S.st.perfect++; save(); confetti(); checkBadges(); }
+      app.innerHTML = `${boki(q.length ? '여기까지 저장했어! 다음에 이어서 하자 😊' : okN >= ngN * 3 ? '오늘 완전 잘했어! 내일 또 만나 🦉' : '수고했어! 틀린 단어는 내일 내가 다시 물어볼게')}<section class="card center">
+        <p class="muted">${q.length ? '여기까지 저장했어요' : '오늘 미션 완료! 🎉'}</p>
+        <div class="score">${okN}<span style="font-size:22px;color:var(--sub)"> 정답</span></div>
+        <p class="muted">틀린 문제 ${ngN}개 · 틀린 단어는 내일 보키가 다시 물어봐요</p>${!q.length ? `<p class="bonus">🎁 완료 보너스 ⭐+30</p>` : ''}
+        <button class="btn" id="home">처음으로</button></section>
+        ${list.length ? `<section class="card"><b>헷갈린 단어</b><ul class="wlist">${list.map(o => `<li><button class="say" data-w="${esc(o.w)}">🔊</button><span class="w">${esc(o.w)}</span><span class="m">${esc(o.m)}</span></li>`).join('')}</ul></section>` : ''}`;
+      $('#home').onclick = () => root(Today);
+      app.querySelectorAll('.say').forEach(b => b.onclick = () => speak(b.dataset.w));
+    };
+    next();
+  }
+
+  // ── 자유 연습
+  const PRACTICE_MODES = [
+    { id: 'card', icon: '🃏', name: '카드 넘기기' },
+    { id: 'en', icon: '🔤', name: '뜻 고르기' },
+    { id: 'ko', icon: '🇰🇷', name: '영어 고르기' },
+    { id: 'listen', icon: '🎧', name: '듣고 고르기' },
+    { id: 'spell', icon: '✍️', name: '철자 쓰기' },
+    { id: 'match', icon: '🧩', name: '짝 맞추기' },
+  ];
+  function sources() {
+    const L = learned();
+    return [
+      { id: 'weak', name: '😵 자주 틀린 단어', list: L.filter(o => (card(o.w).l || 0) > 0).sort((a, b) => card(b.w).l - card(a.w).l).slice(0, 40) },
+      { id: 'learning', name: '🌱 새싹 단어', list: L.filter(o => stage(o.w) === 1) },
+      { id: 'recent', name: '🆕 최근 배운 단어', list: L.slice(-40) },
+      { id: 'all', name: '📦 지금까지 배운 단어 전부', list: L },
+    ];
+  }
+  function PracticeSource(mode, presetList, presetName) {
+    if (presetList) { stack.pop(); return go(Practice, mode, presetList, presetName); }
+    const m = PRACTICE_MODES.find(x => x.id === mode);
+    setTitle(m.name);
+    const srcs = sources();
+    app.innerHTML = `<section class="card"><p style="margin-top:0"><b>어떤 단어로 연습할까요?</b></p>
+      ${srcs.map((s, i) => `<button class="src" data-i="${i}" ${s.list.length < 4 ? 'disabled' : ''}><span>${s.name}</span><b>${s.list.length}개</b></button>`).join('')}
+      <p class="muted" style="margin-bottom:0">단어장 탭에서 세트를 골라 연습할 수도 있어요.</p></section>
+      ${learned().length < 4 ? `<p class="muted center">먼저 '오늘의 미션'에서 새 단어를 배워 보세요.</p>` : ''}`;
+    app.querySelectorAll('.src').forEach(b => b.onclick = () => { const s = srcs[+b.dataset.i]; stack.pop(); go(Practice, mode, s.list, s.name); });
+  }
+  function Practice(mode, list, name) {
+    const m = PRACTICE_MODES.find(x => x.id === mode);
+    setTitle(`${m.name} · ${name}`);
+    const deck = shuffle(list).slice(0, mode === 'match' ? 30 : 20);
+    if (mode === 'card') return CardDeck(deck);
+    if (mode === 'match') return Match(deck);
+    let i = 0, ok = 0; const miss = [];
+    const next = () => {
+      if (i >= deck.length) {
+        S.st.practice++; addXP(10); save(); checkBadges();
+        app.innerHTML = `<section class="card center"><p class="muted">연습 끝! ⭐+10</p>
+          <div class="score">${Math.round(ok / deck.length * 100)}점</div><p class="muted">${deck.length}문제 중 ${ok}개 정답</p>
+          ${miss.length ? `<button class="btn" id="re" style="margin-bottom:10px">틀린 ${miss.length}개 다시</button>` : ''}
+          <button class="btn light" id="dn">끝내기</button></section>`;
+        if (miss.length) $('#re').onclick = () => { stack.pop(); go(Practice, mode, miss.slice(), '틀린 단어'); };
+        $('#dn').onclick = back; return;
+      }
+      app.innerHTML = `<div class="progress-top"><span>${i + 1} / ${deck.length}</span><span>정답 ${ok}</span></div>
+        <div class="bar"><i style="width:${i / deck.length * 100}%"></i></div><div id="qhost" style="margin-top:12px"></div>`;
+      ask($('#qhost'), deck[i], mode, r => { practiceResult(deck[i].w, r); if (r) ok++; else miss.push(deck[i]); i++; next(); });
+    };
+    next();
+  }
+  function CardDeck(deck) {
+    let i = 0, ok = 0; const miss = [];
     const draw = () => {
-      const kn = knownIn(list);
-      app.innerHTML = `
-        <section class="card">
-          <div class="row between"><span class="lvl">${level(d)}</span><span class="muted">${kn} / ${list.length} 외움</span></div>
-          <div class="bar" style="margin:10px 0 14px"><i style="width:${kn / list.length * 100}%"></i></div>
-          <div class="btns"><button class="btn" id="fc">🃏 카드로 외우기</button><button class="btn light" id="qz">✓ 퀴즈 풀기</button></div>
-        </section>
-        <section class="card">
-          <div class="row between" style="margin-bottom:4px"><b>단어 목록</b><button class="toggle" id="hide">${S.hide ? '뜻 보이기' : '뜻 가리기'}</button></div>
-          <ul class="wlist">${list.map(o => `
-            <li><button class="say" data-w="${esc(o.w)}">🔊</button>
-              <span class="w">${esc(o.w)}<span class="p">${posLabel(o.p)}</span></span>
-              ${S.known[o.w] ? '<span class="k">✓</span>' : ''}
-              <span class="m ${S.hide ? 'hide' : ''}">${esc(o.m)}</span></li>`).join('')}</ul>
-        </section>`;
-      $('#fc').onclick = () => go(Flash, list, `Day ${d + 1} 카드`);
-      $('#qz').onclick = () => go(QuizMode, list, `Day ${d + 1} 퀴즈`);
-      $('#hide').onclick = () => { S.hide = !S.hide; save(); draw(); };
+      if (i >= deck.length) {
+        app.innerHTML = `<section class="card center"><p class="muted">카드 한 바퀴 끝!</p>
+          <div class="score">${ok}<span style="font-size:22px;color:var(--sub)"> / ${deck.length}</span></div>
+          ${miss.length ? `<button class="btn" id="re" style="margin-bottom:10px">모르는 ${miss.length}개만 다시</button>` : ''}
+          <button class="btn light" id="dn">끝내기</button></section>`;
+        if (miss.length) $('#re').onclick = () => { deck = shuffle(miss.splice(0)); i = 0; ok = 0; draw(); };
+        $('#dn').onclick = back; return;
+      }
+      const o = deck[i];
+      app.innerHTML = `<div class="progress-top"><span>${i + 1} / ${deck.length}</span><span>알아요 ${ok}</span></div>
+        <div class="bar" style="margin-bottom:12px"><i style="width:${i / deck.length * 100}%"></i></div>
+        <div class="flash" id="card"><div class="inner">
+          <div class="face"><button class="say" id="say">🔊</button><div class="word">${esc(o.w)}</div><div class="pos">${posLabel(o.p)}</div><div class="hint">탭해서 뜻 보기</div></div>
+          <div class="face back"><div class="word sm">${esc(o.w)}</div><div class="mean">${esc(o.m)}</div></div>
+        </div></div>
+        <div class="judge"><button class="no" id="no">모르겠어요</button><button class="yes" id="yes">알아요</button></div>`;
+      const c = $('#card');
+      c.onclick = e => { if (e.target.id !== 'say') c.classList.toggle('flip'); };
+      $('#say').onclick = () => speak(o.w);
+      $('#yes').onclick = () => { ok++; i++; touch(); save(); draw(); };
+      $('#no').onclick = () => { if (!c.classList.contains('flip')) { c.classList.add('flip'); return; } practiceResult(o.w, false); miss.push(o); i++; draw(); };
+      speak(o.w);
+    };
+    draw();
+  }
+  function Match(deck) {
+    let round = 0, mistakes = 0; const t0 = Date.now();
+    const rounds = []; for (let k = 0; k < deck.length; k += 6) rounds.push(deck.slice(k, k + 6));
+    if (rounds.length > 1 && rounds[rounds.length - 1].length < 3) rounds[rounds.length - 2].push(...rounds.pop());
+    const draw = () => {
+      if (round >= rounds.length) {
+        const sec = Math.round((Date.now() - t0) / 1000);
+        if (deck.length >= 12 && sec <= 60) S.st.match60++; S.st.practice++; addXP(10 + Math.max(0, 60 - sec) / 2 | 0); save(); checkBadges();
+        app.innerHTML = `<section class="card center"><p class="muted">짝 맞추기 끝!</p><div class="score">${sec}초</div>
+          <p class="muted">${deck.length}쌍 · 실수 ${mistakes}번</p><button class="btn" id="re" style="margin-bottom:10px">한 번 더</button><button class="btn light" id="dn">끝내기</button></section>`;
+        $('#re').onclick = () => { stack.pop(); go(Practice, 'match', deck, '한 번 더'); };
+        $('#dn').onclick = back; return;
+      }
+      const r = rounds[round];
+      const L = shuffle(r), R = shuffle(r);
+      app.innerHTML = `<div class="progress-top"><span>${round + 1} / ${rounds.length} 라운드</span><span>실수 ${mistakes}</span></div>
+        <div class="match"><div>${L.map(o => `<button class="tile en" data-w="${esc(o.w)}">${esc(o.w)}</button>`).join('')}</div>
+        <div>${R.map(o => `<button class="tile ko" data-w="${esc(o.w)}">${esc(o.m)}</button>`).join('')}</div></div>`;
+      let sel = null, left = r.length;
+      app.querySelectorAll('.tile').forEach(t => t.onclick = () => {
+        if (t.classList.contains('gone')) return;
+        if (t.classList.contains('en')) speak(t.dataset.w);
+        if (!sel || sel.classList.contains(t.classList.contains('en') ? 'en' : 'ko')) { if (sel) sel.classList.remove('sel'); sel = t; t.classList.add('sel'); return; }
+        if (sel.dataset.w === t.dataset.w) {
+          [sel, t].forEach(x => { x.classList.remove('sel'); x.classList.add('gone'); }); sel = null; left--;
+          if (!left) { round++; setTimeout(draw, 350); }
+        } else {
+          mistakes++; practiceResult(sel.dataset.w, false); const a = sel; sel = null;
+          [a, t].forEach(x => { x.classList.remove('sel'); x.classList.add('shake'); setTimeout(() => x.classList.remove('shake'), 400); });
+          app.querySelector('.progress-top span:last-child').textContent = `실수 ${mistakes}`;
+        }
+      });
+    };
+    draw();
+  }
+
+  // ── 단어장
+  function Book() {
+    setTitle('단어장');
+    app.innerHTML = `<p class="muted" style="margin:0 2px 12px">${ordered.length}개 단어 · 세트 순서대로 '오늘의 미션'에 새 단어로 나와요. 미리 구경하거나 따로 연습해도 좋아요!</p>
+      <div class="days">${sets.map((s, k) => {
+        const c = [0, 1, 2, 3].map(st => s.filter(o => stage(o.w) === st).length);
+        return `<button class="day" data-k="${k}"><b>세트 ${k + 1}</b><small>${s.length}개 · ${setLevel(k)}</small>
+          <div class="stack-bar thin">${[3, 2, 1].map(st => c[st] ? `<i style="width:${c[st] / s.length * 100}%;background:${STAGE_C[st]}"></i>` : '').join('')}</div></button>`;
+      }).join('')}</div>`;
+    app.querySelectorAll('.day').forEach(b => b.onclick = () => go(SetView, +b.dataset.k));
+  }
+  Book.tab = 'book';
+  let hideMean = false;
+  function SetView(k) {
+    setTitle(`세트 ${k + 1}`);
+    const list = sets[k];
+    const draw = () => {
+      app.innerHTML = `<section class="card"><div class="row between"><span class="lvl">${setLevel(k)}</span><span class="muted">${list.filter(o => card(o.w)).length} / ${list.length}개 심음</span></div>
+        <div class="modes" style="margin-top:12px">${PRACTICE_MODES.map(m => `<button class="mode" data-m="${m.id}"><span>${m.icon}</span>${m.name}</button>`).join('')}</div></section>
+        <section class="card"><div class="row between" style="margin-bottom:4px"><b>단어 목록</b><button class="toggle" id="hide">${hideMean ? '뜻 보이기' : '뜻 가리기'}</button></div>
+        <ul class="wlist">${list.map(o => `<li><button class="say" data-w="${esc(o.w)}">🔊</button>${dot(o.w)}
+          <span class="w">${esc(o.w)}<span class="p">${posLabel(o.p)}</span></span><span class="m ${hideMean ? 'hide' : ''}">${esc(o.m)}</span></li>`).join('')}</ul></section>`;
+      app.querySelectorAll('.mode').forEach(b => b.onclick = () => go(PracticeSource, b.dataset.m, list, `세트 ${k + 1}`));
+      $('#hide').onclick = () => { hideMean = !hideMean; draw(); };
       app.querySelectorAll('.say').forEach(b => b.onclick = () => speak(b.dataset.w));
       app.querySelectorAll('.m.hide').forEach(m => m.onclick = () => m.classList.remove('hide'));
     };
     draw();
   }
 
-  // ── 플래시카드
-  function Flash(list, title) {
-    setTitle(title);
-    let deck = shuffle(list), i = 0, ok = 0; const missed = [];
-    const draw = () => {
-      if (i >= deck.length) {
-        app.innerHTML = `<section class="card center">
-          <p class="muted">카드 한 바퀴 끝!</p><div class="score">${ok}<span style="font-size:22px;color:var(--sub)"> / ${deck.length}</span></div>
-          <p class="muted">알아요 ${ok}개 · 모르겠어요 ${missed.length}개</p>
-          ${missed.length ? `<button class="btn" id="again" style="margin-bottom:10px">모르는 ${missed.length}개만 다시</button>` : ''}
-          <button class="btn light" id="qz" style="margin-bottom:10px">퀴즈로 확인하기</button>
-          <button class="btn light" id="done">끝내기</button></section>`;
-        if (missed.length) $('#again').onclick = () => { deck = shuffle(missed.splice(0)); i = 0; ok = 0; draw(); };
-        $('#qz').onclick = () => { stack.pop(); go(QuizMode, list, title.replace('카드', '퀴즈')); };
-        $('#done').onclick = back;
-        return;
-      }
-      const o = deck[i];
-      app.innerHTML = `
-        <div class="progress-top"><span>${i + 1} / ${deck.length}</span><span>알아요 ${ok}</span></div>
-        <div class="bar" style="margin-bottom:12px"><i style="width:${i / deck.length * 100}%"></i></div>
-        <div class="flash" id="card"><div class="inner">
-          <div class="face"><button class="say" id="say">🔊</button><div class="word">${esc(o.w)}</div><div class="pos">${posLabel(o.p)}</div><div class="hint">탭해서 뜻 보기</div></div>
-          <div class="face back"><div class="word" style="font-size:22px;color:var(--sub);margin-bottom:12px">${esc(o.w)}</div><div class="mean">${esc(o.m)}</div></div>
-        </div></div>
-        <div class="judge"><button class="no" id="no">모르겠어요</button><button class="yes" id="yes">알아요</button></div>`;
-      const card = $('#card');
-      card.onclick = e => { if (e.target.id !== 'say') card.classList.toggle('flip'); };
-      $('#say').onclick = () => speak(o.w);
-      $('#yes').onclick = () => { markKnown(o.w); ok++; i++; draw(); };
-      $('#no').onclick = () => { if (!card.classList.contains('flip')) { card.classList.add('flip'); return; } markWrong(o.w); missed.push(o); i++; draw(); };
-      speak(o.w);
-    };
-    draw();
-  }
-
-  // ── 퀴즈 방식 선택
-  function QuizMode(list, title, isWrongNote) {
-    setTitle(title);
-    app.innerHTML = `<section class="card">
-      <p style="margin-top:0"><b>${list.length}문제</b> · 어떤 방식으로 풀까요?</p>
-      <button class="btn" id="m1" style="margin-bottom:10px">영어 보고 뜻 고르기</button>
-      <button class="btn light" id="m2" style="margin-bottom:10px">뜻 보고 영어 고르기</button>
-      <button class="btn light" id="m3">섞어서</button></section>`;
-    const start = mode => { stack.pop(); go(Quiz, list, title, mode, isWrongNote); };
-    $('#m1').onclick = () => start('en'); $('#m2').onclick = () => start('ko'); $('#m3').onclick = () => start('mix');
-  }
-
-  function choicesFor(o, field) {
-    const same = ordered.filter(x => x.w !== o.w && x.p === o.p && x.m !== o.m);
-    const pool = shuffle(same.length >= 3 ? same : ordered.filter(x => x.w !== o.w));
-    const picks = []; for (const x of pool) { if (picks.length === 3) break; if (!picks.some(p => p[field] === x[field])) picks.push(x); }
-    return shuffle([o, ...picks]);
-  }
-
-  // ── 퀴즈
-  function Quiz(list, title, mode, isWrongNote) {
-    setTitle(title);
-    const qs = shuffle(list); let i = 0, score = 0; const missed = [];
-    const draw = () => {
-      if (i >= qs.length) return result();
-      const o = qs[i], dir = mode === 'mix' ? (Math.random() < .5 ? 'en' : 'ko') : mode;
-      const opts = choicesFor(o, dir === 'en' ? 'm' : 'w');
-      app.innerHTML = `
-        <div class="progress-top"><span>${i + 1} / ${qs.length}</span><span>정답 ${score}</span></div>
-        <div class="bar"><i style="width:${i / qs.length * 100}%"></i></div>
-        ${dir === 'en'
-          ? `<div class="q-word">${esc(o.w)}</div><div class="q-pos">${posLabel(o.p)} · <button class="toggle" id="say">🔊 듣기</button></div>`
-          : `<div class="q-word ko">${esc(o.m)}</div><div class="q-pos">${posLabel(o.p)}</div>`}
-        <div class="opts">${opts.map((x, n) => `<button class="opt" data-w="${esc(x.w)}"><span class="n">${n + 1}</span>${esc(dir === 'en' ? x.m : x.w)}</button>`).join('')}</div>
-        <div id="nx"></div>`;
-      if (dir === 'en') { $('#say').onclick = () => speak(o.w); speak(o.w); }
-      app.querySelectorAll('.opt').forEach(b => b.onclick = () => {
-        const right = b.dataset.w === o.w;
-        app.querySelectorAll('.opt').forEach(x => { x.disabled = true; if (x.dataset.w === o.w) x.classList.add('correct'); });
-        if (right) {
-          score++; markKnown(o.w);
-          if (S.wrong[o.w]) { S.wrong[o.w]--; if (S.wrong[o.w] <= 0) delete S.wrong[o.w]; save(); }
-          if (dir === 'ko') speak(o.w);
-          setTimeout(() => { i++; draw(); }, 650);
-        } else {
-          b.classList.add('wrong'); markWrong(o.w); missed.push(o);
-          $('#nx').innerHTML = `<p class="muted center" style="margin:14px 0 4px">${esc(o.w)} = ${esc(o.m)} · 오답노트에 넣었어요</p><button class="btn next" id="go">다음 ›</button>`;
-          $('#go').onclick = () => { i++; draw(); };
-        }
-      });
-    };
-    const result = () => {
-      const pct = Math.round(score / qs.length * 100);
-      app.innerHTML = `<section class="card center">
-        <p class="muted">${pct === 100 ? '완벽해요! 🎉' : pct >= 80 ? '잘했어요! 👍' : pct >= 50 ? '조금만 더! 💪' : '오답노트로 복습해요 📖'}</p>
-        <div class="score">${pct}점</div><p class="muted">${qs.length}문제 중 ${score}개 정답</p>
-        ${missed.length ? `<button class="btn" id="re" style="margin:6px 0 10px">틀린 ${missed.length}개 다시 풀기</button>` : ''}
-        <button class="btn light" id="done">끝내기</button></section>
-        ${missed.length ? `<section class="card"><b>틀린 단어</b><ul class="wlist">${missed.map(o => `<li><span class="w">${esc(o.w)}</span><span class="m">${esc(o.m)}</span></li>`).join('')}</ul></section>` : ''}`;
-      if (missed.length) $('#re').onclick = () => { stack.pop(); go(Quiz, missed.slice(), title, mode, isWrongNote); };
-      $('#done').onclick = back;
-    };
-    draw();
-  }
-
-  // ── 오답노트
-  function Wrong() {
-    setTitle('오답노트');
-    const list = Object.keys(S.wrong).map(w => byWord[w]).filter(Boolean).sort((a, b) => S.wrong[b.w] - S.wrong[a.w]);
-    if (!list.length) { app.innerHTML = `<div class="empty"><div style="font-size:44px">📭</div><p>틀린 단어가 없어요.<br>퀴즈에서 틀리거나 카드에서 '모르겠어요'를 누르면 여기 모여요.</p></div>`; return; }
-    app.innerHTML = `
-      <section class="card"><p style="margin-top:0"><b>${list.length}개</b> 복습할 단어가 있어요</p>
-        <p class="muted" style="margin-top:-6px">퀴즈에서 두 번 맞히면 오답노트에서 빠져요.</p>
-        <div class="btns"><button class="btn" id="qz">오답 퀴즈</button><button class="btn light" id="fc">오답 카드</button></div></section>
-      <section class="card"><ul class="wlist">${list.map(o => `
-        <li><button class="say" data-w="${esc(o.w)}">🔊</button><span class="w">${esc(o.w)}<span class="p">${posLabel(o.p)}</span></span>
-        <span class="m">${esc(o.m)}</span></li>`).join('')}</ul></section>`;
-    const sample = list.slice(0, 30);
-    $('#qz').onclick = () => go(QuizMode, sample, '오답 퀴즈', true);
-    $('#fc').onclick = () => go(Flash, sample, '오답 카드');
-    app.querySelectorAll('.say').forEach(b => b.onclick = () => speak(b.dataset.w));
-  }
-  Wrong.tab = 'wrong';
-
   // ── 기록
   function Stats() {
-    setTitle('학습 기록');
-    const k = Object.keys(S.known).filter(w => byWord[w]).length;
-    const doneDays = dayList.filter(l => knownIn(l) === l.length).length;
-    const cells = []; const d = new Date(); d.setDate(d.getDate() - 27);
-    for (let n = 0; n < 28; n++) { const key = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; cells.push(`<i class="${S.days.includes(key) ? 'on' : ''}" title="${key}"></i>`); d.setDate(d.getDate() + 1); }
+    setTitle('내 정원'); checkBadges();
+    const cnt = [0, 1, 2, 3].map(s => ordered.filter(o => stage(o.w) === s).length);
+    const T = TODAY();
+    const fc = [1, 2, 3, 4, 5, 6, 7].map(k => learned().filter(o => card(o.w).d === T + k).length);
+    const maxF = Math.max(1, ...fc);
+    const days = ['일', '월', '화', '수', '목', '금', '토'];
+    const cells = []; for (let k = 27; k >= 0; k--) { const d = T - k, lg = S.log[d]; const n = lg ? lg.n + lg.ok + lg.ng : 0;
+      cells.push(`<i class="${n ? (n >= 40 ? 'on3' : n >= 15 ? 'on2' : 'on') : ''}" title="${n}문제"></i>`); }
+    const tl = S.log[T] || { n: 0, ok: 0, ng: 0 };
     app.innerHTML = `
       <div class="stat-grid">
-        <div class="stat"><b>${k}</b><span>외운 단어</span></div>
-        <div class="stat"><b>${doneDays}<small style="font-size:15px"> / 30</small></b><span>완료한 Day</span></div>
-        <div class="stat"><b>${streak()}일</b><span>연속 학습</span></div>
-        <div class="stat"><b>${Object.keys(S.wrong).length}</b><span>오답노트</span></div>
+        <div class="stat"><b>Lv.${levelOf(S.xp || 0)}</b><span>${titleOf(levelOf(S.xp || 0))} · ⭐ ${S.xp || 0}</span></div>
+        <div class="stat"><b>${streak()}일</b><span>🔥 연속 출석</span></div>
+        <div class="stat"><b>${learned().length}</b><span>🌱 심은 단어</span></div>
+        <div class="stat"><b>${cnt[3]}</b><span>🌳 내 거 된 단어</span></div>
+        <div class="stat"><b>${tl.ok + tl.ng ? Math.round(tl.ok / (tl.ok + tl.ng) * 100) + '%' : '-'}</b><span>🎯 오늘 맞힌 비율</span></div>
+        <div class="stat"><b>${S.st.combo || 0}</b><span>⚡ 최고 연속 정답</span></div>
       </div>
-      <section class="card" style="margin-top:14px"><b>최근 4주</b><div class="cal">${cells.join('')}</div></section>
-      <section class="card"><b>홈 화면에 추가하기</b>
-        <p class="muted">앱처럼 쓰려면 브라우저 메뉴에서 <b>'홈 화면에 추가'</b>를 누르세요. (아이폰: 사파리 공유 버튼 → 홈 화면에 추가)</p>
-        <p class="muted" style="margin-bottom:0">학습 기록은 이 휴대폰 브라우저에 저장돼요.</p></section>
-      <button class="danger" id="reset">학습 기록 모두 지우기</button>`;
-    $('#reset').onclick = () => { if (confirm('외운 단어·오답노트·기록을 모두 지울까요?')) { S = { ...blank, known: {}, wrong: {}, days: [] }; save(); toast('초기화했어요'); Stats(); } };
+      <section class="card" style="margin-top:14px"><div class="row between"><b>🎀 스티커 모음</b><span class="muted">${Object.keys(S.badges).length} / ${BADGES.length}</span></div>
+        <div class="badges">${BADGES.map(b => `<div class="badge ${S.badges[b.id] ? 'got' : ''}" title="${esc(b.desc)}"><span>${S.badges[b.id] ? b.icon : '🔒'}</span><b>${b.name}</b><small>${b.desc}</small></div>`).join('')}</div></section>
+      <section class="card"><b>🌼 단어 정원</b>
+        ${[3, 2, 1, 0].map(s => `<div class="lvrow"><span><i class="dot" style="background:${STAGE_C[s]}"></i>${STAGE[s]}</span><div class="bar"><i style="width:${cnt[s] / ordered.length * 100}%;background:${STAGE_C[s]}"></i></div><b>${cnt[s]}</b></div>`).join('')}
+        <p class="muted" style="margin-bottom:0">🌱 새싹은 며칠 뒤, 🌿 무럭무럭은 1~2주 뒤, 🌳 내 거!는 한 달 뒤쯤 다시 물어봐요.</p></section>
+      <section class="card"><b>📅 보키가 다시 물어볼 단어</b>
+        <div class="fc">${fc.map((n, k) => { const d = new Date(); d.setDate(d.getDate() + k + 1); return `<div><i style="height:${n / maxF * 70 + 2}px"></i><b>${n}</b><span>${days[d.getDay()]}</span></div>`; }).join('')}</div></section>
+      <section class="card"><b>🗓️ 최근 4주 출석</b><div class="cal">${cells.join('')}</div></section>
+      <section class="card"><div class="row between"><b>${esc(me().emoji)} ${esc(me().name)}</b><button class="toggle" id="who">사람 바꾸기</button></div>
+        <p class="muted" style="margin:10px 0 6px">새 단어는 어디서부터?</p>
+        <div class="chips" style="margin:0">${LEVEL.map((l, k) => `<button class="chip lv ${S.start === k ? 'on' : ''}" data-k="${k}">${l}부터</button>`).join('')}</div></section>
+      <section class="card"><b>✨ 하루에 배울 새 단어</b>
+        <div class="chips" style="margin:10px 0 0">${[5, 10, 20, 30, 40].map(n => `<button class="chip ${S.daily === n ? 'on' : ''}" data-n="${n}">${n}개</button>`).join('')}</div>
+        <p class="muted" style="margin-bottom:0">처음엔 10개면 충분해요! 다시 볼 단어도 같이 늘어나니까 무리하지 마세요.</p></section>
+      <section class="card"><b>📱 홈 화면에 추가하기</b>
+        <p class="muted" style="margin-bottom:0">앱처럼 쓰려면 브라우저 메뉴에서 '홈 화면에 추가'를 누르세요. (아이폰: 사파리 공유 버튼 → 홈 화면에 추가) 기록은 이 휴대폰 브라우저에 저장돼요.</p></section>
+      <button class="danger" id="reset">처음부터 다시 하기 (기록 지우기)</button>`;
+    $('#who').onclick = () => root(Who);
+    app.querySelectorAll('.chip.lv').forEach(c => c.onclick = () => { S.start = +c.dataset.k; save(); toast(`${LEVEL[S.start]} 단어부터 새로 나와요`); Stats(); });
+    app.querySelectorAll('.chip:not(.lv)').forEach(c => c.onclick = () => { S.daily = +c.dataset.n; save(); toast(`하루 새 단어 ${S.daily}개`); Stats(); });
+    $('#reset').onclick = () => { if (confirm('모든 학습 기록을 지울까요? 되돌릴 수 없어요.')) { S = fresh(); S.start = me().start || 0; save(); toast('초기화했어요'); Stats(); } };
   }
   Stats.tab = 'stats';
 
@@ -274,17 +567,44 @@
       const t = q.value.trim().toLowerCase();
       if (!t) { res.innerHTML = `<li class="muted">${ordered.length}개 단어에서 찾아요</li>`; return; }
       const hits = ordered.filter(o => o.w.startsWith(t) || o.m.includes(t)).concat(ordered.filter(o => !o.w.startsWith(t) && o.w.includes(t))).slice(0, 50);
-      res.innerHTML = hits.length ? hits.map(o => { const d = dayList.findIndex(l => l.includes(o)); return `
-        <li><button class="say" data-w="${esc(o.w)}">🔊</button><span class="w">${esc(o.w)}<span class="p">Day ${d + 1}</span></span><span class="m">${esc(o.m)}</span></li>`; }).join('') : '<li class="muted">검색 결과가 없어요</li>';
+      res.innerHTML = hits.length ? hits.map(o => `<li><button class="say" data-w="${esc(o.w)}">🔊</button>${dot(o.w)}<span class="w">${esc(o.w)}<span class="p">${STAGE[stage(o.w)]}</span></span><span class="m">${esc(o.m)}</span></li>`).join('') : '<li class="muted">검색 결과가 없어요</li>';
       res.querySelectorAll('.say').forEach(b => b.onclick = () => speak(b.dataset.w));
     };
     q.oninput = run; run(); setTimeout(() => q.focus(), 50);
   }
 
-  $('#backBtn').onclick = back;
-  $('#searchBtn').onclick = () => go(Search);
-  document.querySelectorAll('.tabbar button').forEach(b => b.onclick = () => root({ home: Home, wrong: Wrong, stats: Stats }[b.dataset.tab]));
-  root(Home);
 
+  // ── 누가 공부할까요?
+  const lvOfProfile = id => { try { const d = JSON.parse(localStorage.getItem('voca-data-' + id) || 'null'); return d && d.xp ? ` · Lv.${levelOf(d.xp)}` : ''; } catch { return ''; } };
+  const EMOJIS = ['🐣', '🐶', '🐱', '🐰', '🦊', '🐼', '🐯', '🐸'];
+  function Who() {
+    setTitle('누가 공부할까요?');
+    $('#backBtn').hidden = true;
+    app.innerHTML = `${boki('안녕! 나는 단어 친구 보키야 🦉<br>오늘은 누가 공부해? 이름을 눌러 줘!')}
+      ${P.list.length ? `<div class="people">${P.list.map(p => `<button class="person" data-id="${p.id}"><span>${p.emoji}</span><b>${esc(p.name)}</b><small>${esc(p.course || '')}${lvOfProfile(p.id)}</small></button>`).join('')}</div>` : ''}
+      <details class="card addp"><summary>+ 다른 사람 추가하기</summary>
+        <input class="search" id="nm" maxlength="10" placeholder="이름 (예: 민준)" style="margin:12px 0">
+        <div class="chips">${EMOJIS.map((e, k) => `<button class="chip em ${k === 0 ? 'on' : ''}" data-e="${e}">${e}</button>`).join('')}</div>
+        <div class="course"><button class="crs on" data-s="0"><b>중학생 코스</b><small>중학 단어부터 차근차근</small></button>
+          <button class="crs" data-s="1"><b>고등학생 코스</b><small>고등 단어부터 (중학 단어는 나중에)</small></button></div>
+        <p class="muted">영어가 어렵다면 고등학생이어도 중학생 코스로 시작하는 걸 추천해요. 나중에 '기록'에서 바꿀 수 있어요.</p>
+        <button class="btn accent" id="add">시작하기 ›</button></details>`;
+    let emo = EMOJIS[0], st = 0;
+    app.querySelectorAll('.chip.em').forEach(c => c.onclick = () => { app.querySelectorAll('.chip.em').forEach(x => x.classList.remove('on')); c.classList.add('on'); emo = c.dataset.e; });
+    app.querySelectorAll('.crs').forEach(c => c.onclick = () => { app.querySelectorAll('.crs').forEach(x => x.classList.remove('on')); c.classList.add('on'); st = +c.dataset.s; });
+    app.querySelectorAll('.person').forEach(b => b.onclick = () => { P.cur = b.dataset.id; saveP(); loadProfile(); root(Today); });
+    $('#add').onclick = () => {
+      const name = $('#nm').value.trim(); if (!name) { toast('이름을 써 주세요'); $('#nm').focus(); return; }
+      const id = Date.now().toString(36);
+      P.list.push({ id, name, emoji: emo, start: st, course: st ? '고등학생' : '중학생' }); P.cur = id; saveP();
+      S = fresh(); S.start = st; save(); root(Today);
+    };
+  }
+  Who.tab = 'none';
+
+  $('#backBtn').onclick = back;
+  $('#searchBtn').onclick = () => P.cur && go(Search);
+  document.querySelectorAll('.tabbar button').forEach(b => b.onclick = () => !P.cur ? null : root({ today: Today, book: Book, stats: Stats }[b.dataset.tab]));
+  root(P.cur ? Today : Who);
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 })();
