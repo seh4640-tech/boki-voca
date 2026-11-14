@@ -35,15 +35,16 @@
   const KEY = () => 'voca-data-' + P.cur;
   const fresh = () => ({ cards: {}, daily: 10, start: 0, days: [], newToday: { d: 0, n: 0 }, log: {}, xp: 0, badges: {}, st: { spell: 0, perfect: 0, match60: 0, sessions: 0, practice: 0, combo: 0 } });
   let S = fresh();
-  function loadProfile() { const raw = localStorage.getItem(KEY()); try { S = Object.assign(fresh(), JSON.parse(raw || '{}')); } catch { S = fresh(); } if (!raw) { const p = P.list.find(x => x.id === P.cur); S.start = (p && p.start) || 0; } }
+  function loadProfile() { const raw = localStorage.getItem(KEY()); try { S = Object.assign(fresh(), JSON.parse(raw || '{}')); } catch { S = fresh(); } if (!(S.daily >= 10)) S.daily = 10; }
   const me = () => P.list.find(p => p.id === P.cur);
+  try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch {}
   if (P.cur && me()) loadProfile(); else P.cur = null;
   const save = () => { if (!P.cur) return; try { localStorage.setItem(KEY(), JSON.stringify(S)); } catch {} };
   const dayNum = (t = new Date()) => Math.floor((t.getTime() - t.getTimezoneOffset() * 60000) / 86400000);
   const TODAY = () => dayNum();
   function touch(kind) {
     const t = TODAY();
-    if (!S.days.includes(t)) S.days.push(t);
+    if (!S.days.includes(t)) { S.days.push(t); setTimeout(() => celebrate('출석 완료! 🌱', '오늘의 새싹을 정원에 심었어요.<br>내일 오면 꽃봉오리가 되고, 그다음엔 꽃이 펴요!', '🌱'), 900); }
     S.log[t] = S.log[t] || { n: 0, r: 0, ok: 0, ng: 0 };
     if (kind) S.log[t][kind]++;
   }
@@ -73,7 +74,7 @@
   }
   const dueList = () => ordered.filter(o => { const c = card(o.w); return c && c.d <= TODAY(); }).sort((a, b) => card(a.w).d - card(b.w).d);
   const newLeft = () => Math.max(0, S.daily - (S.newToday.d === TODAY() ? S.newToday.n : 0));
-  const unseen = () => { const u = ordered.filter(o => !card(o.w)); return [...u.filter(o => o.lv >= S.start), ...u.filter(o => o.lv < S.start)]; };
+  const unseen = () => ordered.filter(o => !card(o.w));
   const learned = () => ordered.filter(o => card(o.w));
   function streak() {
     let n = 0, d = TODAY();
@@ -378,6 +379,16 @@
     });
   }
 
+
+  // ── 출석 정원
+  const gardenCard = (small) => {
+    const n = new Set(S.days).size, page = Math.max(0, Math.floor((n - 1) / (window.GARDEN_PER || 32)));
+    return `<section class="card garden"><div class="row between"><b>🌷 출석 정원</b><span class="muted">${n}일째 · 🔥 ${streak()}일 연속</span></div>
+      <div class="gwrap"><canvas class="gcv" aria-label="출석 정원"></canvas></div>
+      <p class="muted" style="margin:8px 0 0;font-size:13px">${n ? `공부한 날마다 꽃이 하나씩 피어나요. 7번째마다 나무가 자라요!${page ? ` (정원 ${page + 1}번째)` : ''}` : '오늘 공부하면 첫 새싹이 심어져요 🌱'}</p></section>`;
+  };
+  const mountGarden = () => app.querySelectorAll('.gcv').forEach(c => window.drawGarden && window.drawGarden(c, S.days, TODAY()));
+
   // ── 오늘
   function Today() {
     setTitle(`${me().emoji} ${me().name}의 영단어`);
@@ -385,7 +396,9 @@
     const total = ordered.length, lr = learned().length, lt = ordered.filter(o => stage(o.w) === 3).length;
     const st = streak();
     const tomorrow = ordered.filter(o => { const c = card(o.w); return c && c.d === TODAY() + 1; }).length;
-    const doneToday = due === 0 && nl === 0;
+    if (S.sess && S.sess.d !== TODAY()) { delete S.sess; save(); }
+    const resumable = !!(S.sess && S.sess.q && S.sess.q.length);
+    const doneToday = !resumable && due === 0 && nl === 0;
     const hello = doneToday ? `${esc(me().name)}, 오늘 할 거 다 했어요! 진짜 멋져요 🎉`
       : due === 0 && !learned().length ? `안녕 ${esc(me().name)}! 나는 보키야 🦉<br>하루 ${S.daily}개씩 천천히 같이 외워 보자!`
       : pick([`${esc(me().name)}, 왔구나! 오늘도 조금만 해 보자`, `잊어버릴 때쯤 다시 보여 줄게. 그게 오래 기억하는 비법이야!`, `틀려도 괜찮아. 틀린 단어는 내가 다시 보여 줄게`, `딱 5분이면 돼요. 시작해 볼까?`]);
@@ -397,9 +410,12 @@
         <div class="row between" style="margin-top:14px"><span class="sub">오늘의 미션</span><span class="sub">🎀 스티커 ${Object.keys(S.badges || {}).length} / ${BADGES.length}</span></div>
         ${doneToday ? `<div class="big">미션 완료! 🎉</div><p class="sub" style="margin:4px 0 14px">내일 다시 볼 단어 ${tomorrow}개가 기다려요.</p>
           <button class="btn ghost" id="more">새 단어 10개 더 하기</button>`
+        : resumable ? `<div class="big" style="font-size:26px;margin-top:8px">하던 미션이 있어요!</div><p class="sub" style="margin:4px 0 14px">${S.sess.doneN} / ${S.sess.total} 까지 했어요. 그 자리부터 이어서 해요.</p>
+          <button class="btn accent" id="resume">이어서 하기 ›</button>`
         : `<div class="todo"><div><b>${due}</b><span>🔁 다시 보기</span></div><div><b>${nl}</b><span>✨ 새 단어</span></div></div>
           <button class="btn accent" id="start">미션 시작! ›</button>`}
       </section>
+      ${gardenCard(true)}
       <section class="card">
         <div class="row between"><b>🌼 내 단어 정원</b><span class="muted">${lr} / ${total}개 심음</span></div>
         <div class="stack-bar">${[3, 2, 1, 0].map(s => { const n = ordered.filter(o => stage(o.w) === s).length; return n ? `<i style="width:${n / total * 100}%;background:${STAGE_C[s]}"></i>` : ''; }).join('')}</div>
@@ -417,7 +433,9 @@
       }, 600);
     }
     if (!S.alarm) { app.insertAdjacentHTML('beforeend', `<button class="alarm-tip" id="atip">⏰ 매일 밤 11시에 보키가 알려 줄까요? <b>알림 켜기 ›</b></button>`); $('#atip').onclick = () => root(Stats); }
+    mountGarden();
     const st0 = $('#start'); if (st0) st0.onclick = () => go(Session, false);
+    const rs = $('#resume'); if (rs) rs.onclick = () => go(Session, false, true);
     const mo = $('#more'); if (mo) mo.onclick = () => go(Session, true);
   }
   Today.tab = 'today';
@@ -430,11 +448,12 @@
     if (b === 3) return pick(['ko', 'listen', 'spell']);
     return pick(['spell', 'ko', 'listen']);
   }
-  function Session(extra) {
+  function Session(extra, resume) {
     setTitle('오늘의 미션');
-    const due = dueList().slice(0, 150);
+    const R = resume && S.sess && S.sess.d === TODAY() ? S.sess : null;
+    const due = R ? [] : dueList().slice(0, 150);
     const nCount = extra ? 10 : Math.min(newLeft(), 60);
-    const news = unseen().slice(0, nCount);
+    const news = R ? [] : unseen().slice(0, nCount);
     // 큐: {o, mode, kind: 'review'|'intro'|'check'|'retry'}
     let q = due.map(o => ({ o, mode: reviewMode(o), kind: 'review' }));
     // 새 단어는 소개 → 몇 문제 뒤 확인 문제
@@ -446,17 +465,27 @@
     while (ri < q.length) merged.push(q[ri++]);
     q = merged;
     // 짝 맞추기 라운드: 중간에 한 번, 마지막에 한 번 (그때까지 나온 단어로)
-    const seen = [];
+    let seen = [];
     if (q.length >= 8) q.splice(Math.floor(q.length / 2), 0, { kind: 'match' });
     if (q.length >= 4) q.push({ kind: 'match' });
-    const total = q.length + news.length;
+    let total = q.length + news.length;
     const matchWords = () => shuffle([...new Map(seen.map(o => [o.w, o])).values()].slice(-12)).slice(0, 6);
-    let doneN = 0, okN = 0, ngN = 0; const wrongs = new Set(); combo = 0; let finished = false;
+    let doneN = 0, okN = 0, ngN = 0; let wrongs = new Set(); combo = 0; let finished = false;
+    if (R) {
+      q = R.q.map(x => ({ o: x.w ? byWord[x.w] : undefined, mode: x.mode, kind: x.kind })).filter(x => x.kind === 'match' || x.o);
+      total = R.total; doneN = R.doneN; okN = R.okN; ngN = R.ngN; wrongs = new Set(R.wrongs); seen = R.seen.map(w => byWord[w]).filter(Boolean);
+    }
+    // 매 문제마다 자동 저장 → 나갔다 와도 그 자리부터 이어서
+    const persist = () => {
+      S.sess = { d: TODAY(), q: q.map(x => ({ w: x.o && x.o.w, mode: x.mode, kind: x.kind })), total, doneN, okN, ngN, wrongs: [...wrongs], seen: seen.slice(-12).map(o => o.w) };
+      save();
+    };
     if (!q.length) { app.innerHTML = `<div class="empty"><div style="font-size:44px">🎉</div><p>지금은 할 학습이 없어요.</p></div>`; return; }
 
     const next = () => {
       checkBadges();
       if (!q.length) return summary();
+      persist();
       const it = q.shift();
       if (it.kind === 'match') {
         const ws = matchWords();
@@ -489,8 +518,9 @@
     };
     const summary = () => {
       const list = [...wrongs].map(w => byWord[w]);
+      if (!q.length) { delete S.sess; save(); }
       if (!q.length && !finished) { finished = true; fx('complete'); S.st.sessions++; addXP(30); if (ngN === 0 && okN >= 10) S.st.perfect++; save(); confetti(); checkBadges(); }
-      app.innerHTML = `${boki(q.length ? '여기까지 저장했어! 다음에 이어서 하자 😊' : okN >= ngN * 3 ? '오늘 완전 잘했어! 내일 또 만나 🦉' : '수고했어! 틀린 단어는 내일 내가 다시 물어볼게')}<section class="card center">
+      app.innerHTML = `${boki(q.length ? '자동으로 저장했어! 다음에 이 자리부터 이어서 하자 😊' : okN >= ngN * 3 ? '오늘 완전 잘했어! 내일 또 만나 🦉' : '수고했어! 틀린 단어는 내일 내가 다시 물어볼게')}<section class="card center">
         <p class="muted">${q.length ? '여기까지 저장했어요' : '오늘 미션 완료! 🎉'}</p>
         <div class="score">${okN}<span style="font-size:22px;color:var(--sub)"> 정답</span></div>
         <p class="muted">틀린 문제 ${ngN}개 · 틀린 단어는 내일 보키가 다시 물어봐요</p>${!q.length ? `<p class="bonus">🎁 완료 보너스 ⭐+30</p>` : ''}
@@ -685,7 +715,7 @@
     const cells = []; for (let k = 27; k >= 0; k--) { const d = T - k, lg = S.log[d]; const n = lg ? lg.n + lg.ok + lg.ng : 0;
       cells.push(`<i class="${n ? (n >= 40 ? 'on3' : n >= 15 ? 'on2' : 'on') : ''}" title="${n}문제"></i>`); }
     const tl = S.log[T] || { n: 0, ok: 0, ng: 0 };
-    app.innerHTML = `
+    app.innerHTML = `${gardenCard()}
       <div class="stat-grid">
         <div class="stat"><b>Lv.${levelOf(S.xp || 0)}</b><span>${titleOf(levelOf(S.xp || 0))} · ⭐ ${S.xp || 0}</span></div>
         <div class="stat"><b>${streak()}일</b><span>🔥 연속 출석</span></div>
@@ -701,13 +731,11 @@
         <p class="muted" style="margin-bottom:0">🌱 새싹은 며칠 뒤, 🌿 무럭무럭은 1~2주 뒤, 🌳 내 거!는 한 달 뒤쯤 다시 물어봐요.</p></section>
       <section class="card"><b>📅 보키가 다시 물어볼 단어</b>
         <div class="fc">${fc.map((n, k) => { const d = new Date(); d.setDate(d.getDate() + k + 1); return `<div><i style="height:${n / maxF * 70 + 2}px"></i><b>${n}</b><span>${days[d.getDay()]}</span></div>`; }).join('')}</div></section>
-      <section class="card"><b>🗓️ 최근 4주 출석</b><div class="cal">${cells.join('')}</div></section>
       <section class="card"><div class="row between"><b>${esc(me().emoji)} ${esc(me().name)}</b><button class="toggle" id="who">사람 바꾸기</button></div>
-        <p class="muted" style="margin:10px 0 6px">새 단어는 어디서부터?</p>
-        <div class="chips" style="margin:0">${LEVEL.map((l, k) => `<button class="chip lv ${S.start === k ? 'on' : ''}" data-k="${k}">${l}부터</button>`).join('')}</div></section>
+</section>
       <section class="card"><b>✨ 하루에 배울 새 단어</b>
-        <div class="chips" style="margin:10px 0 0">${[5, 10, 20, 30, 40].map(n => `<button class="chip ${S.daily === n ? 'on' : ''}" data-n="${n}">${n}개</button>`).join('')}</div>
-        <p class="muted" style="margin-bottom:0">처음엔 10개면 충분해요! 다시 볼 단어도 같이 늘어나니까 무리하지 마세요.</p></section>
+        <div class="chips" style="margin:10px 0 0">${[10, 15, 20, 30, 40].map(n => `<button class="chip ${S.daily === n ? 'on' : ''}" data-n="${n}">${n}개</button>`).join('')}</div>
+        <p class="muted" style="margin-bottom:0">최소 10개씩! 다시 볼 단어도 같이 늘어나니까 처음엔 10개를 추천해요.</p></section>
       <section class="card"><b>🔔 소리와 진동</b>
         <div class="chips" style="margin:10px 0 0"><button class="chip ${S.sfx !== false ? 'on' : ''}" id="tsfx">🎵 효과음 ${S.sfx !== false ? '켜짐' : '꺼짐'}</button><button class="chip ${S.hap !== false ? 'on' : ''}" id="thap">📳 진동 ${S.hap !== false ? '켜짐' : '꺼짐'}</button></div></section>
       ${alarmCard()}
@@ -715,13 +743,13 @@
         <p class="muted" style="margin-bottom:0">앱처럼 쓰려면 브라우저 메뉴에서 '홈 화면에 추가'를 누르세요. (아이폰: 사파리 공유 버튼 → 홈 화면에 추가) 기록은 이 휴대폰 브라우저에 저장돼요.</p></section>
       <p class="muted center" style="font-size:11.5px">발음 녹음: Wikimedia Commons (CC BY-SA) · 효과음: uisfx (CC0)</p>
       <button class="danger" id="reset">처음부터 다시 하기 (기록 지우기)</button>`;
+    mountGarden();
     $('#who').onclick = () => root(Who);
     $('#alarm').onclick = addAlarm;
     $('#tsfx').onclick = () => { S.sfx = S.sfx === false; save(); Stats(); if (S.sfx) fx('ok'); };
     $('#thap').onclick = () => { S.hap = S.hap === false; save(); Stats(); if (S.hap) buzz('ok'); };
-    app.querySelectorAll('.chip.lv').forEach(c => c.onclick = () => { S.start = +c.dataset.k; save(); toast(`${LEVEL[S.start]} 단어부터 새로 나와요`); Stats(); });
     app.querySelectorAll('.chip:not(.lv):not(#tsfx):not(#thap)').forEach(c => c.onclick = () => { S.daily = +c.dataset.n; save(); toast(`하루 새 단어 ${S.daily}개`); Stats(); });
-    $('#reset').onclick = () => { if (confirm('모든 학습 기록을 지울까요? 되돌릴 수 없어요.')) { S = fresh(); S.start = me().start || 0; save(); toast('초기화했어요'); Stats(); } };
+    $('#reset').onclick = () => { if (confirm('모든 학습 기록을 지울까요? 되돌릴 수 없어요.')) { S = fresh(); save(); toast('초기화했어요'); Stats(); } };
   }
   Stats.tab = 'stats';
 
@@ -752,19 +780,16 @@
       <details class="card addp"><summary>+ 다른 사람 추가하기</summary>
         <input class="search" id="nm" maxlength="10" placeholder="이름 (예: 민준)" style="margin:12px 0">
         <div class="chips">${EMOJIS.map((e, k) => `<button class="chip em ${k === 0 ? 'on' : ''}" data-e="${e}">${e}</button>`).join('')}</div>
-        <div class="course"><button class="crs on" data-s="0"><b>1단계부터</b><small>처음부터 차근차근 (추천)</small></button>
-          <button class="crs" data-s="1"><b>2단계부터</b><small>기초 단어를 이미 잘 알아요</small></button></div>
-        <p class="muted">단계는 나중에 '내 정원'에서 바꿀 수 있어요.</p>
+
         <button class="btn accent" id="add">시작하기 ›</button></details>`;
     let emo = EMOJIS[0], st = 0;
     app.querySelectorAll('.chip.em').forEach(c => c.onclick = () => { app.querySelectorAll('.chip.em').forEach(x => x.classList.remove('on')); c.classList.add('on'); emo = c.dataset.e; });
-    app.querySelectorAll('.crs').forEach(c => c.onclick = () => { app.querySelectorAll('.crs').forEach(x => x.classList.remove('on')); c.classList.add('on'); st = +c.dataset.s; });
     app.querySelectorAll('.person').forEach(b => b.onclick = () => { P.cur = b.dataset.id; saveP(); loadProfile(); root(Today); });
     $('#add').onclick = () => {
       const name = $('#nm').value.trim(); if (!name) { toast('이름을 써 주세요'); $('#nm').focus(); return; }
       const id = Date.now().toString(36);
       P.list.push({ id, name, emoji: emo, start: st, course: '' }); P.cur = id; saveP();
-      S = fresh(); S.start = st; save(); root(Today);
+      S = fresh(); save(); root(Today);
     };
   }
   Who.tab = 'none';

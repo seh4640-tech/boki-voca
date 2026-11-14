@@ -270,3 +270,7 @@ a.btn{text-decoration:none;box-sizing:border-box}
 .tile.ko{font-size:15px}
 .spell{font-size:28px}
 .answer{font-size:20px}
+.garden{padding:14px}
+.gwrap{margin-top:10px;border-radius:16px;overflow:hidden;border:3px solid #f1e6dc;box-shadow:inset 0 0 0 2px #fff;background:#7ccf5f;line-height:0}
+.gcv{width:100%;height:auto;image-rendering:pixelated;image-rendering:crisp-edges;display:block}
+.pop-card p{line-height:1.5}
