@@ -1,5 +1,5 @@
 // 오프라인에서도 열리도록 캐시 (파일이 바뀌면 VERSION을 올리세요)
-const VERSION = 'v7';
+const VERSION = 'v8';
 const FILES = ['./', 'index.html', 'style.css', 'app.js', 'words.js', 'audio.js', 'manifest.json', 'icon.svg', 'icon-192.png'];
 
 self.addEventListener('install', e => { e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES))); self.skipWaiting(); });

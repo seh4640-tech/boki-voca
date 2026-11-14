@@ -83,6 +83,42 @@
   }
 
 
+
+  // ── 효과음(직접 합성) + 진동
+  let actx = null;
+  const sfxOn = () => !S || S.sfx !== false, hapOn = () => !S || S.hap !== false;
+  function ac() { if (!actx) { const C = window.AudioContext || window.webkitAudioContext; if (!C) return null; actx = new C(); } if (actx.state === 'suspended') actx.resume(); return actx; }
+  function tone(freq, start, dur, type = 'sine', vol = .18, slide) {
+    const c = ac(); if (!c) return;
+    const t = c.currentTime + start, o = c.createOscillator(), g = c.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t); if (slide) o.frequency.exponentialRampToValueAtTime(slide, t + dur);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + .012); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(c.destination); o.start(t); o.stop(t + dur + .02);
+  }
+  const SFX = {
+    tap: () => tone(660, 0, .07, 'sine', .07, 880),
+    ok: () => { tone(784, 0, .12, 'triangle', .16); tone(1175, .09, .2, 'triangle', .16); },
+    ng: () => { tone(330, 0, .16, 'sine', .14, 220); tone(262, .13, .22, 'sine', .12, 196); },
+    pair: () => tone(988, 0, .1, 'triangle', .13, 1319),
+    flip: () => tone(520, 0, .08, 'sine', .08, 760),
+    combo: () => [784, 988, 1175, 1568].forEach((f, k) => tone(f, k * .06, .12, 'triangle', .11)),
+    fanfare: () => [523, 659, 784, 1047, 784, 1047].forEach((f, k) => tone(f, k * .1, k === 5 ? .45 : .14, 'triangle', .15)),
+  };
+  // 아이폰(iOS 18+)은 스위치 체크박스를 누를 때 진동이 나는 걸 이용
+  const hapLabel = (() => { const l = document.createElement('label'); l.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-9px'; l.innerHTML = '<input type="checkbox" switch>'; document.body.appendChild(l); return l; })();
+  const VIB = { tap: 8, ok: 25, ng: [40, 60, 40], pair: 15, flip: 8, combo: [20, 40, 20], fanfare: [30, 60, 30, 60, 60] };
+  function buzz(kind) {
+    if (!hapOn()) return;
+    if (navigator.vibrate) { navigator.vibrate(VIB[kind] || 10); return; }
+    hapLabel.click(); if (kind === 'ng' || kind === 'fanfare' || kind === 'combo') setTimeout(() => hapLabel.click(), 120);
+  }
+  function fx(kind) { if (sfxOn()) try { SFX[kind](); } catch {} buzz(kind); }
+  document.addEventListener('pointerdown', e => {
+    const b = e.target.closest('button, a.btn, .tile, .opt');
+    if (!b || b.disabled || b.closest('.opt') || b.classList.contains('tile')) return;
+    fx('tap');
+  }, { passive: true });
+
   // ── 게임 요소: 경험치·레벨·배지
   const TITLES = ['알', '아기 부엉이', '꼬마 탐험가', '단어 수집가', '단어 탐정', '단어 기사', '단어 마법사', '단어 박사', '단어 마스터', '전설의 부엉이'];
   const xpFor = n => 30 * n * (n - 1); // 레벨 n이 되는 데 필요한 누적 경험치
@@ -128,7 +164,7 @@
   function celebrate(title, body, icon) { popQ.push({ title, body, icon }); if (!popOn) nextPop(); }
   function nextPop() {
     const p = popQ.shift(); if (!p) { popOn = false; return; }
-    popOn = true; confetti();
+    popOn = true; confetti(); fx('fanfare');
     const el = document.createElement('div'); el.className = 'pop';
     el.innerHTML = `<div class="pop-card"><div class="pop-icon">${p.icon}</div><b>${p.title}</b><p>${p.body}</p><button class="btn accent">좋아요!</button></div>`;
     document.body.appendChild(el);
@@ -264,6 +300,7 @@
     if (mode === 'listen' && !audioUrl(o.w) && !canTTS) mode = 'en';
     const finish = (ok, extra = '') => {
       onAnswer(ok, mode);
+      fx(ok ? (combo >= 3 && combo % 5 === 0 ? 'combo' : 'ok') : 'ng');
       if (ok) { const af = host.querySelector('.after'); if (af) af.innerHTML = `<p class="cheer">${pick(CHEER_OK)} ${comboHTML()}</p>`; setTimeout(() => done(true), mode === 'spell' ? 800 : 700); return; }
       host.querySelector('.after').innerHTML = `<p class="cheer ng">${pick(CHEER_NG)}</p><p class="answer">${esc(o.w)} <span>${posLabel(o.p)}</span> = ${esc(o.m)}</p>${extra}<button class="btn next" id="nx">다음 ›</button>`;
       host.querySelector('#nx').onclick = () => done(false);
@@ -275,7 +312,7 @@
           <div class="face back"><span class="tag">✨ 새 단어</span><div class="word sm">${esc(o.w)}</div><div class="mean">${esc(o.m)}</div><div class="hint">소리 내어 3번 읽어 보세요</div></div>
         </div></div><button class="btn" id="got">외웠어요 ›</button>`;
       const c = host.querySelector('#card');
-      c.onclick = e => { if (e.target.id !== 'say') c.classList.toggle('flip'); };
+      c.onclick = e => { if (e.target.id !== 'say') { c.classList.toggle('flip'); fx('flip'); } };
       host.querySelector('#say').onclick = () => speak(o.w);
       host.querySelector('#got').onclick = () => { if (!c.classList.contains('flip')) { c.classList.add('flip'); return; } done(true); };
       speak(o.w);
@@ -436,7 +473,7 @@
     };
     const summary = () => {
       const list = [...wrongs].map(w => byWord[w]);
-      if (!q.length && !finished) { finished = true; S.st.sessions++; addXP(30); if (ngN === 0 && okN >= 10) S.st.perfect++; save(); confetti(); checkBadges(); }
+      if (!q.length && !finished) { finished = true; fx('fanfare'); S.st.sessions++; addXP(30); if (ngN === 0 && okN >= 10) S.st.perfect++; save(); confetti(); checkBadges(); }
       app.innerHTML = `${boki(q.length ? '여기까지 저장했어! 다음에 이어서 하자 😊' : okN >= ngN * 3 ? '오늘 완전 잘했어! 내일 또 만나 🦉' : '수고했어! 틀린 단어는 내일 내가 다시 물어볼게')}<section class="card center">
         <p class="muted">${q.length ? '여기까지 저장했어요' : '오늘 미션 완료! 🎉'}</p>
         <div class="score">${okN}<span style="font-size:22px;color:var(--sub)"> 정답</span></div>
@@ -461,7 +498,7 @@
       if (t.classList.contains('en')) speak(t.dataset.w);
       if (!sel || sel.classList.contains(t.classList.contains('en') ? 'en' : 'ko')) { if (sel) sel.classList.remove('sel'); sel = t; t.classList.add('sel'); return; }
       if (sel.dataset.w === t.dataset.w) {
-        [sel, t].forEach(x => { x.classList.remove('sel'); x.classList.add('gone'); }); sel = null; left--;
+        [sel, t].forEach(x => { x.classList.remove('sel'); x.classList.add('gone'); }); sel = null; left--; fx('pair');
         if (!left) {
           const sec = Math.round((Date.now() - t0) / 1000), bonus = miss ? 5 : 10;
           addXP(bonus); save();
@@ -469,7 +506,7 @@
           $('#mdone').onclick = done;
         }
       } else {
-        miss++; const a = sel; sel = null;
+        miss++; fx('ng'); const a = sel; sel = null;
         [a, t].forEach(x => { x.classList.remove('sel'); x.classList.add('shake'); setTimeout(() => x.classList.remove('shake'), 400); });
       }
     });
@@ -547,7 +584,7 @@
         </div></div>
         <div class="judge"><button class="no" id="no">모르겠어요</button><button class="yes" id="yes">알아요</button></div>`;
       const c = $('#card');
-      c.onclick = e => { if (e.target.id !== 'say') c.classList.toggle('flip'); };
+      c.onclick = e => { if (e.target.id !== 'say') { c.classList.toggle('flip'); fx('flip'); } };
       $('#say').onclick = () => speak(o.w);
       $('#yes').onclick = () => { ok++; i++; touch(); save(); draw(); };
       $('#no').onclick = () => { if (!c.classList.contains('flip')) { c.classList.add('flip'); return; } practiceResult(o.w, false); miss.push(o); i++; draw(); };
@@ -579,10 +616,10 @@
         if (t.classList.contains('en')) speak(t.dataset.w);
         if (!sel || sel.classList.contains(t.classList.contains('en') ? 'en' : 'ko')) { if (sel) sel.classList.remove('sel'); sel = t; t.classList.add('sel'); return; }
         if (sel.dataset.w === t.dataset.w) {
-          [sel, t].forEach(x => { x.classList.remove('sel'); x.classList.add('gone'); }); sel = null; left--;
+          [sel, t].forEach(x => { x.classList.remove('sel'); x.classList.add('gone'); }); sel = null; left--; fx('pair');
           if (!left) { round++; setTimeout(draw, 350); }
         } else {
-          mistakes++; practiceResult(sel.dataset.w, false); const a = sel; sel = null;
+          mistakes++; fx('ng'); practiceResult(sel.dataset.w, false); const a = sel; sel = null;
           [a, t].forEach(x => { x.classList.remove('sel'); x.classList.add('shake'); setTimeout(() => x.classList.remove('shake'), 400); });
           app.querySelector('.progress-top span:last-child').textContent = `실수 ${mistakes}`;
         }
@@ -655,6 +692,8 @@
       <section class="card"><b>✨ 하루에 배울 새 단어</b>
         <div class="chips" style="margin:10px 0 0">${[5, 10, 20, 30, 40].map(n => `<button class="chip ${S.daily === n ? 'on' : ''}" data-n="${n}">${n}개</button>`).join('')}</div>
         <p class="muted" style="margin-bottom:0">처음엔 10개면 충분해요! 다시 볼 단어도 같이 늘어나니까 무리하지 마세요.</p></section>
+      <section class="card"><b>🔔 소리와 진동</b>
+        <div class="chips" style="margin:10px 0 0"><button class="chip ${S.sfx !== false ? 'on' : ''}" id="tsfx">🎵 효과음 ${S.sfx !== false ? '켜짐' : '꺼짐'}</button><button class="chip ${S.hap !== false ? 'on' : ''}" id="thap">📳 진동 ${S.hap !== false ? '켜짐' : '꺼짐'}</button></div></section>
       ${alarmCard()}
       <section class="card"><b>📱 홈 화면에 추가하기</b>
         <p class="muted" style="margin-bottom:0">앱처럼 쓰려면 브라우저 메뉴에서 '홈 화면에 추가'를 누르세요. (아이폰: 사파리 공유 버튼 → 홈 화면에 추가) 기록은 이 휴대폰 브라우저에 저장돼요.</p></section>
@@ -662,8 +701,10 @@
       <button class="danger" id="reset">처음부터 다시 하기 (기록 지우기)</button>`;
     $('#who').onclick = () => root(Who);
     $('#alarm').onclick = addAlarm;
+    $('#tsfx').onclick = () => { S.sfx = S.sfx === false; save(); Stats(); if (S.sfx) fx('ok'); };
+    $('#thap').onclick = () => { S.hap = S.hap === false; save(); Stats(); if (S.hap) buzz('ok'); };
     app.querySelectorAll('.chip.lv').forEach(c => c.onclick = () => { S.start = +c.dataset.k; save(); toast(`${LEVEL[S.start]} 단어부터 새로 나와요`); Stats(); });
-    app.querySelectorAll('.chip:not(.lv)').forEach(c => c.onclick = () => { S.daily = +c.dataset.n; save(); toast(`하루 새 단어 ${S.daily}개`); Stats(); });
+    app.querySelectorAll('.chip:not(.lv):not(#tsfx):not(#thap)').forEach(c => c.onclick = () => { S.daily = +c.dataset.n; save(); toast(`하루 새 단어 ${S.daily}개`); Stats(); });
     $('#reset').onclick = () => { if (confirm('모든 학습 기록을 지울까요? 되돌릴 수 없어요.')) { S = fresh(); S.start = me().start || 0; save(); toast('초기화했어요'); Stats(); } };
   }
   Stats.tab = 'stats';
