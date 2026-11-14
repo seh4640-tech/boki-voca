@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>수능 영단어 30일</title>
+<meta name="theme-color" content="#1f3a5f">
+<meta name="description" content="수능 필수 영단어 30일 완성 — 플래시카드, 퀴즈, 오답노트">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="수능영단어">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <button id="backBtn" class="icon-btn" aria-label="뒤로" hidden>‹</button>
+  <h1 id="title">수능 영단어 30일</h1>
+  <button id="searchBtn" class="icon-btn" aria-label="검색">⌕</button>
+</header>
+<main id="app"></main>
+<nav class="tabbar">
+  <button data-tab="home" class="on"><span>📚</span>학습</button>
+  <button data-tab="wrong"><span>📝</span>오답노트</button>
+  <button data-tab="stats"><span>📊</span>기록</button>
+</nav>
+<div id="toast"></div>
+<script src="words.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
