@@ -406,39 +406,93 @@
   }
   const mountGarden = () => app.querySelectorAll('.gcv').forEach(c => window.drawGarden && window.drawGarden(c, S.days, TODAY(), { onTap: meetFriend }));
 
-  // ── 오늘
+  // ── 오늘: 게임처럼 따라가는 학습 길
+  const LESSON = 10, PER_UNIT = 4;
+  const UNIT_NAMES = ['첫 만남', '쑥쑥 새싹', '반짝반짝', '두근두근', '차곡차곡', '씩씩하게', '반딧불 밤', '무지개 다리', '별빛 산책', '숲속 탐험', '바다 건너', '구름 위로', '용감한 모험', '보물 찾기', '햇살 가득', '꽃길 따라'];
+  const UNIT_COLORS = [['#8f7cff', '#6f5fe0'], ['#ffad3b', '#e08a14'], ['#3ec486', '#25a06a'], ['#ff7aa2', '#e0517f'], ['#4aa8ff', '#2c86d8'], ['#ff8a5b', '#e0663a']];
+  const LESSON_ICONS = ['⭐', '🎧', '🔤', '✍️'];
+  const FLAME = (size = 120, face = true) => `<svg class="flame" viewBox="0 0 100 120" width="${size}" height="${size * 1.2}" aria-hidden="true">
+      <defs><linearGradient id="fg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffd25e"/><stop offset=".55" stop-color="#ff8a3d"/><stop offset="1" stop-color="#ff5a6e"/></linearGradient></defs>
+      <path d="M50 4 C58 22 80 34 84 62 C88 92 70 114 50 114 C30 114 12 98 14 70 C15 52 26 44 30 30 C36 42 40 46 44 46 C42 30 44 16 50 4 Z" fill="url(#fg)" stroke="#ff6b4a" stroke-width="3"/>
+      <path d="M50 52 C56 62 66 70 64 86 C63 98 56 104 50 104 C42 104 36 97 37 86 C38 74 46 68 50 52 Z" fill="#fff3c4" opacity=".9"/>
+      ${face ? `<circle cx="42" cy="84" r="3.6" fill="#3b3456"/><circle cx="58" cy="84" r="3.6" fill="#3b3456"/><circle cx="43.2" cy="82.8" r="1.2" fill="#fff"/><circle cx="59.2" cy="82.8" r="1.2" fill="#fff"/><path d="M45 91 Q50 96 55 91" stroke="#3b3456" stroke-width="2.4" fill="none" stroke-linecap="round"/><circle cx="36" cy="90" r="3" fill="#ff8fa3" opacity=".7"/><circle cx="64" cy="90" r="3" fill="#ff8fa3" opacity=".7"/>` : ''}
+    </svg>`;
+
   function Today() {
     setTitle(`${me().emoji} ${me().name}의 영단어`);
     const due = dueList().length, nl = Math.min(newLeft(), unseen().length);
-    const total = ordered.length, lr = learned().length, lt = ordered.filter(o => stage(o.w) === 3).length;
-    const st = streak();
-    const tomorrow = ordered.filter(o => { const c = card(o.w); return c && c.d === TODAY() + 1; }).length;
     if (S.sess && S.sess.d !== TODAY()) { delete S.sess; save(); }
     const resumable = !!(S.sess && S.sess.q && S.sess.q.length);
     const doneToday = !resumable && due === 0 && nl === 0;
-    const hello = doneToday ? `${esc(me().name)}, 오늘 할 거 다 했어요! 진짜 멋져요 🎉`
-      : due === 0 && !learned().length ? `안녕 ${esc(me().name)}! 나는 보키야 🦉<br>하루 ${S.daily}개씩 천천히 같이 외워 보자!`
-      : pick([`${esc(me().name)}, 왔구나! 오늘도 조금만 해 보자`, `잊어버릴 때쯤 다시 보여 줄게. 그게 오래 기억하는 비법이야!`, `틀려도 괜찮아. 틀린 단어는 내가 다시 보여 줄게`, `딱 5분이면 돼요. 시작해 볼까?`]);
-    app.innerHTML = `${boki(hello)}
-      <section class="card hero">
-        <div class="lvbox"><div class="lvnum">Lv.${levelOf(S.xp || 0)}</div><div style="flex:1"><div class="row between"><b>${titleOf(levelOf(S.xp || 0))}</b><span class="sub">${st ? `🔥 ${st}일 연속` : ''}</span></div>
-          <div class="bar"><i style="width:${((S.xp || 0) - xpFor(levelOf(S.xp || 0))) / (xpFor(levelOf(S.xp || 0) + 1) - xpFor(levelOf(S.xp || 0))) * 100}%"></i></div>
-          <small class="sub">다음 레벨까지 ⭐ ${xpFor(levelOf(S.xp || 0) + 1) - (S.xp || 0)}</small></div></div>
-        <div class="row between" style="margin-top:14px"><span class="sub">오늘의 미션</span><span class="sub">🎀 스티커 ${Object.keys(S.badges || {}).length} / ${BADGES.length}</span></div>
-        ${doneToday ? `<div class="big">미션 완료! 🎉</div><p class="sub" style="margin:4px 0 14px">내일 다시 볼 단어 ${tomorrow}개가 기다려요.</p>
-          <button class="btn ghost" id="more">새 단어 10개 더 하기</button>`
-        : resumable ? `<div class="big" style="font-size:26px;margin-top:8px">하던 미션이 있어요!</div><p class="sub" style="margin:4px 0 14px">${S.sess.doneN} / ${S.sess.total} 까지 했어요. 그 자리부터 이어서 해요.</p>
-          <button class="btn accent" id="resume">이어서 하기 ›</button>`
-        : `<div class="todo"><div><b>${due}</b><span>🔁 다시 보기</span></div><div><b>${nl}</b><span>✨ 새 단어</span></div></div>
-          <button class="btn accent" id="start">미션 시작! ›</button>`}
-      </section>
-      ${gardenCard(true)}
-      <section class="card">
-        <div class="row between"><b>🌼 내 단어 정원</b><span class="muted">${lr} / ${total}개 심음</span></div>
-        <div class="stack-bar">${[3, 2, 1, 0].map(s => { const n = ordered.filter(o => stage(o.w) === s).length; return n ? `<i style="width:${n / total * 100}%;background:${STAGE_C[s]}"></i>` : ''; }).join('')}</div>
-        <div class="legend">${[0, 1, 2, 3].map(s => `<span><i class="dot" style="background:${STAGE_C[s]}"></i>${STAGE[s]} ${ordered.filter(o => stage(o.w) === s).length}</span>`).join('')}</div>
-        <p class="muted" style="margin:10px 0 0">단어를 맞힐 때마다 쑥쑥 자라요. 잊어버릴 때쯤 보키가 다시 물어봐 줄게요! (🌳 ${lt}그루)</p>
-      </section>`;
+    const lr = learned().length, totalLessons = Math.ceil(ordered.length / LESSON);
+    const curL = Math.min(Math.floor(lr / LESSON), totalLessons - 1), curProg = (lr % LESSON) / LESSON;
+    const curU = Math.floor(curL / PER_UNIT);
+    const st = streak(), studiedToday = S.days.includes(TODAY());
+    S.chests = S.chests || {};
+    const bubble = resumable ? '이어하기!' : doneToday ? '+10개 더?' : '시작!';
+    let html = `<div class="topstats">
+        <button class="ts" id="tsStreak">${FLAME(22, false)}<b class="${studiedToday ? 'hot' : 'cold'}">${st}</b></button>
+        <button class="ts" id="tsXp">⭐<b>${S.xp || 0}</b></button>
+        <button class="ts" id="tsLv"><span class="lvpill">Lv.${levelOf(S.xp || 0)}</span></button>
+        <button class="ts" id="tsSt">🎀<b>${Object.keys(S.badges || {}).length}</b></button>
+      </div>`;
+    html += `<div class="mission-tip">${doneToday ? `🎉 오늘 미션 완료! 내일 다시 볼 단어가 보키한테 맡겨져 있어요.` : resumable ? `⏸️ 하던 미션이 있어요 (${S.sess.doneN}/${S.sess.total}) — 반짝이는 버튼을 눌러 이어서!` : `오늘의 미션 · 🔁 다시 보기 <b>${due}</b> · ✨ 새 단어 <b>${nl}</b>`}</div>`;
+    html += `<div class="path">`;
+    const fromU = Math.max(0, curU - 1), toU = Math.min(Math.ceil(totalLessons / PER_UNIT) - 1, curU + 2);
+    for (let u = fromU; u <= toU; u++) {
+      const [c1, c2] = UNIT_COLORS[u % UNIT_COLORS.length];
+      const firstW = ordered.slice(u * PER_UNIT * LESSON, u * PER_UNIT * LESSON + 3).map(o => o.w).join(' · ');
+      html += `<div class="unit" style="--c1:${c1};--c2:${c2}"><div class="ubanner ${u > curU ? 'locked' : ''}"><div><small>유닛 ${u + 1}</small><b>${UNIT_NAMES[u % UNIT_NAMES.length]}</b><span>${esc(firstW)} …</span></div><button class="ubook" data-set="${Math.floor(u * PER_UNIT * LESSON / SET_SIZE)}" aria-label="단어 보기">📒</button></div>`;
+      for (let k = 0; k <= PER_UNIT; k++) {
+        const isChest = k === PER_UNIT, L = u * PER_UNIT + k;
+        const n = u * (PER_UNIT + 1) + k;               // 지그재그 위치
+        const off = Math.round(Math.sin(n * 0.95) * 72);
+        let cls, icon, extra = '';
+        if (isChest) {
+          const ready = curL >= (u + 1) * PER_UNIT, opened = S.chests[u];
+          cls = opened ? 'done chest' : ready ? 'cur chest' : 'lock chest'; icon = opened ? '📭' : '🎁';
+          html += `<div class="nwrap" style="--off:${off}px"><button class="node ${cls}" data-chest="${u}" ${!ready || opened ? 'data-dis="1"' : ''}><span>${icon}</span></button>${ready && !opened ? '<div class="nbub">열어 봐!</div>' : ''}</div>`;
+          continue;
+        }
+        if (L >= totalLessons) break;
+        if (L < curL) { cls = 'done'; icon = LESSON_ICONS[L % 4]; }
+        else if (L === curL) { cls = 'cur'; icon = LESSON_ICONS[L % 4]; extra = `<div class="nbub">${bubble}</div>`; }
+        else { cls = 'lock'; icon = '🔒'; }
+        const ring = L === curL ? `<i class="ring" style="--p:${Math.round(curProg * 100)}"></i>` : '';
+        const side = Math.sin(n * 0.95) > 0 ? -1 : 1;
+        const mascot = L === curL ? `<div class="mascot" style="--side:${side}">${BOKI}</div>` : '';
+        html += `<div class="nwrap" style="--off:${off}px">${extra}${ring}<button class="node ${cls}" data-l="${L}"><span>${icon}</span>${cls === 'done' ? '<em>✓</em>' : ''}</button>${mascot}</div>`;
+      }
+      html += `</div>`;
+    }
+    html += `</div>`;
+    if (!S.alarm) html += `<button class="alarm-tip" id="atip">⏰ 매일 밤 11시에 보키가 알려 줄까요? <b>알림 켜기 ›</b></button>`;
+    app.innerHTML = html;
+
+    // 동작
+    const startMission = () => resumable ? go(Session, false, true) : doneToday ? go(Session, true) : go(Session, false);
+    app.querySelectorAll('.node[data-l]').forEach(b => b.onclick = () => {
+      const L = +b.dataset.l;
+      if (L === curL) return startMission();
+      if (L < curL) { const ws = ordered.slice(L * LESSON, L * LESSON + LESSON); return go(PracticeSource, pick(['en', 'ko', 'listen', 'match']), ws, `레슨 ${L + 1} 복습`); }
+      fx('ng'); toast('🔒 앞 레슨을 끝내면 열려요!');
+    });
+    app.querySelectorAll('.node[data-chest]').forEach(b => b.onclick = () => {
+      if (b.dataset.dis) { fx('ng'); return toast(S.chests[b.dataset.chest] ? '이미 연 상자예요' : '🎁 이 유닛 레슨을 다 끝내면 열 수 있어요!'); }
+      const u = +b.dataset.chest, prize = 20 + Math.floor(Math.random() * 4) * 10;
+      S.chests[u] = TODAY(); addXP(prize); save();
+      celebrate(`보물 상자! 🎁`, `유닛 ${u + 1} 완주 선물로<br>⭐ ${prize}개를 받았어요!`, '🎁', 'complete');
+      Today();
+    });
+    app.querySelectorAll('.ubook').forEach(b => b.onclick = () => go(SetView, +b.dataset.set));
+    $('#tsStreak').onclick = () => go(StreakView, false);
+    $('#tsXp').onclick = $('#tsLv').onclick = () => toast(`Lv.${levelOf(S.xp || 0)} ${titleOf(levelOf(S.xp || 0))} · 다음 레벨까지 ⭐ ${xpFor(levelOf(S.xp || 0) + 1) - (S.xp || 0)}`);
+    $('#tsSt').onclick = () => root(Stats);
+    const at = $('#atip'); if (at) at.onclick = () => root(Stats);
+    // 현재 레슨이 화면 가운데 오도록
+    const cur = app.querySelector('.node.cur[data-l]') || app.querySelector('.node.cur');
+    if (cur) setTimeout(() => cur.scrollIntoView({ block: 'center', behavior: 'instant' in document.documentElement.style ? 'instant' : 'auto' }), 30);
+
     if (!S.alarm && !S.alarmAsked) {
       S.alarmAsked = true; save();
       setTimeout(() => {
@@ -449,13 +503,44 @@
         el.querySelector('#ano').onclick = () => el.remove();
       }, 600);
     }
-    if (!S.alarm) { app.insertAdjacentHTML('beforeend', `<button class="alarm-tip" id="atip">⏰ 매일 밤 11시에 보키가 알려 줄까요? <b>알림 켜기 ›</b></button>`); $('#atip').onclick = () => root(Stats); }
-    mountGarden();
-    const st0 = $('#start'); if (st0) st0.onclick = () => go(Session, false);
-    const rs = $('#resume'); if (rs) rs.onclick = () => go(Session, false, true);
-    const mo = $('#more'); if (mo) mo.onclick = () => go(Session, true);
   }
   Today.tab = 'today';
+
+  // ── 연속 학습 축하 화면 (미션 끝나면 마지막에)
+  function StreakView(afterMission) {
+    setTitle('연속 학습');
+    $('#backBtn').hidden = !!afterMission;
+    const st = streak(), T = TODAY();
+    const now = new Date(); const dow = (now.getDay() + 6) % 7;   // 월=0
+    const weekStart = T - dow, names = ['월', '화', '수', '목', '금', '토', '일'];
+    const done = names.map((_, k) => S.days.includes(weekStart + k));
+    const weekCnt = done.filter(Boolean).length;
+    // 이어진 칸끼리 캡슐로 묶기
+    let cells = '', k = 0;
+    while (k < 7) {
+      if (done[k] && weekStart + k <= T) { let j = k; while (j + 1 < 7 && done[j + 1] && weekStart + j + 1 <= T) j++; cells += `<div class="cap" style="grid-column:${k + 1}/${j + 2}">${'<i>✓</i>'.repeat(j - k + 1)}</div>`; k = j + 1; }
+      else { cells += k === 6 ? `<div class="dayc gift ${weekCnt === 7 ? 'on' : ''}" style="grid-column:7">🎁</div>` : `<div class="dayc ${weekStart + k === T ? 'today' : ''}" style="grid-column:${k + 1}"></div>`; k++; }
+    }
+    const msgs = st >= 2
+      ? [`${st}일 연속! 내일도 오면 <b>${st + 1}일</b>이 돼요 🔥`, `이번 주 <b>${weekCnt}/7일</b> 출석! ${7 - weekCnt > 0 ? `${7 - weekCnt}일만 더 하면 주간 선물 🎁` : '이번 주 완벽 출석! 🎁'}`]
+      : [`첫 불꽃이 켜졌어요! 내일도 오면 <b>2일 연속</b>이 돼요 🔥`, '매일 조금씩이 제일 강해요. 정원에 꽃도 하나씩 피어요 🌷'];
+    if (afterMission && weekCnt === 7 && !(S.weekGift && S.weekGift === weekStart)) { S.weekGift = weekStart; addXP(50); save(); setTimeout(() => celebrate('일주일 완벽 출석! 🎁', '주간 선물로 ⭐ 50개!', '🎁', 'complete'), 1600); }
+    app.innerHTML = `<div class="streak-screen">
+        <div class="sflame">${FLAME(150)}</div>
+        <div class="snum" id="snum">${afterMission ? Math.max(0, st - 1) : st}</div>
+        <div class="slabel">일 연속 학습!</div>
+        <div class="week">${names.map((n, i) => `<span class="${weekStart + i === T ? 'on' : ''}">${n}</span>`).join('')}</div>
+        <div class="weekrow">${cells}</div>
+        <p class="smsg">${msgs[0]}</p>
+        <p class="smsg small">${msgs[1]}</p>
+        ${boki(pick([`${esc(me().name)}, 오늘도 해냈다! 내일 밤에 또 만나 🦉`, '불꽃 꺼지지 않게 내일도 딱 5분만!', '매일 오는 게 진짜 실력이야. 최고!']), true)}
+        <button class="btn sbtn" id="sgo">${afterMission ? `좋아, 내일 또 올게!` : '확인'}</button>
+      </div>`;
+    if (afterMission) {
+      setTimeout(() => { const el = $('#snum'); if (!el) return; el.textContent = st; el.classList.add('bump'); fx('combo'); confetti(); }, 900);
+    }
+    $('#sgo').onclick = () => root(Today);
+  }
 
   // ── 오늘의 학습 세션
   function reviewMode(o) {
@@ -541,9 +626,9 @@
         <p class="muted">${q.length ? '여기까지 저장했어요' : '오늘 미션 완료! 🎉'}</p>
         <div class="score">${okN}<span style="font-size:22px;color:var(--sub)"> 정답</span></div>
         <p class="muted">틀린 문제 ${ngN}개 · 틀린 단어는 내일 보키가 다시 물어봐요</p>${!q.length ? `<p class="bonus">🎁 완료 보너스 ⭐+30</p>` : ''}
-        <button class="btn" id="home">처음으로</button></section>
+        <button class="btn" id="home">${q.length ? '처음으로' : '계속 ›'}</button></section>
         ${list.length ? `<section class="card"><b>헷갈린 단어</b><ul class="wlist">${list.map(o => `<li><button class="say" data-w="${esc(o.w)}">🔊</button><span class="w">${esc(o.w)}</span><span class="m">${esc(o.m)}</span></li>`).join('')}</ul></section>` : ''}`;
-      $('#home').onclick = () => root(Today);
+      $('#home').onclick = () => q.length ? root(Today) : (stack.length = 0, go(StreakView, true));
       app.querySelectorAll('.say').forEach(b => b.onclick = () => speak(b.dataset.w));
     };
     next();
@@ -732,7 +817,13 @@
     const cells = []; for (let k = 27; k >= 0; k--) { const d = T - k, lg = S.log[d]; const n = lg ? lg.n + lg.ok + lg.ng : 0;
       cells.push(`<i class="${n ? (n >= 40 ? 'on3' : n >= 15 ? 'on2' : 'on') : ''}" title="${n}문제"></i>`); }
     const tl = S.log[T] || { n: 0, ok: 0, ng: 0 };
+    const total = ordered.length;
     app.innerHTML = `${gardenCard()}
+      <section class="card">
+        <div class="row between"><b>🌼 내 단어 정원</b><span class="muted">${learned().length} / ${total}개 심음</span></div>
+        <div class="stack-bar">${[3, 2, 1, 0].map(s => { const n = ordered.filter(o => stage(o.w) === s).length; return n ? `<i style="width:${n / total * 100}%;background:${STAGE_C[s]}"></i>` : ''; }).join('')}</div>
+        <div class="legend">${[0, 1, 2, 3].map(s => `<span><i class="dot" style="background:${STAGE_C[s]}"></i>${STAGE[s]} ${ordered.filter(o => stage(o.w) === s).length}</span>`).join('')}</div>
+      </section>
       <div class="stat-grid">
         <div class="stat"><b>Lv.${levelOf(S.xp || 0)}</b><span>${titleOf(levelOf(S.xp || 0))} · ⭐ ${S.xp || 0}</span></div>
         <div class="stat"><b>${streak()}일</b><span>🔥 연속 출석</span></div>
