@@ -10,6 +10,6 @@
 - 홈 화면에 추가하면 앱처럼 사용 (오프라인 지원)
 
 단어는 `words.js`의 `[단어, 품사, 뜻, 단계]`를 고치면 됩니다. 단계는 0~3 (쉬운 단계부터).
-발음 녹음: Wikimedia Commons (CC BY-SA) · 효과음: [uisfx](https://github.com/romainsimon/uisfx) rubber·arcade 팩 (CC0)
+발음 녹음: Wikimedia Commons (CC BY-SA) · 효과음: [uisfx](https://github.com/romainsimon/uisfx) 6개 팩 (CC0)
 
 빌드 없는 정적 사이트라 Vercel에서 그대로 배포됩니다.

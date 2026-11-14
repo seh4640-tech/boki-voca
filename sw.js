@@ -1,6 +1,6 @@
 // 오프라인에서도 열리도록 캐시 (파일이 바뀌면 VERSION을 올리세요)
-const VERSION = 'v11';
-const FILES = ['./', 'index.html', 'style.css', 'app.js', 'garden.js', 'words.js', 'audio.js', 'manifest.json', 'icon.svg', 'icon-192.png', ...['tap', 'flip', 'ok', 'ng', 'pair', 'combo', 'levelup', 'badge', 'complete'].map(k => `sfx/${k}.mp3`)];
+const VERSION = 'v13';
+const FILES = ['./', 'index.html', 'style.css', 'app.js', 'garden.js', 'words.js', 'audio.js', 'manifest.json', 'icon.svg', 'icon-192.png'];
 
 self.addEventListener('install', e => { e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES))); self.skipWaiting(); });
 self.addEventListener('activate', e => {

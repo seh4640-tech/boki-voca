@@ -107,18 +107,21 @@
     fanfare: () => [523, 659, 784, 1047, 784, 1047].forEach((f, k) => tone(f, k * .1, k === 5 ? .45 : .14, 'triangle', .15)),
   };
   SYN.levelup = SYN.badge = SYN.complete = SYN.fanfare;
-  const SFX_VOL = { tap: .5, flip: .6, ok: .8, ng: .7, pair: .8, combo: .9, levelup: 1, badge: 1, complete: 1 };
-  const buffers = {}; let sfxLoading = false;
-  function loadSfx() {
-    if (sfxLoading) return; const c = ac(); if (!c) return; sfxLoading = true;
-    Object.keys(SFX_VOL).forEach(k => fetch(`sfx/${k}.mp3`).then(r => r.arrayBuffer())
-      .then(b => new Promise((ok, ng) => c.decodeAudioData(b, ok, ng))).then(buf => { buffers[k] = buf; }).catch(() => {}));
+  const SFX_VOL = { tap: .35, flip: .4, ok: .3, ng: .35, pair: .4, combo: .4, levelup: .55, badge: .55, complete: .55 };
+  const PACKS = [['soft', '☁️ 부드러운'], ['rubber', '🎈 말랑'], ['organic', '🌿 자연'], ['glass', '✨ 반짝'], ['dreamy', '🫧 몽글'], ['arcade', '👾 게임']];
+  const packOf = () => (S && PACKS.some(p => p[0] === S.pack)) ? S.pack : 'soft';
+  const buffers = {}; const loaded = {};
+  function loadSfx(pack = packOf()) {
+    if (loaded[pack]) return; const c = ac(); if (!c) return; loaded[pack] = true;
+    Object.keys(SFX_VOL).forEach(k => fetch(`sfx/${pack}/${k}.mp3`).then(r => r.arrayBuffer())
+      .then(b => new Promise((ok, ng) => c.decodeAudioData(b, ok, ng))).then(buf => { buffers[pack + '/' + k] = buf; }).catch(() => {}));
   }
-  function playSfx(k) {
+  function playSfx(k, pack = packOf()) {
     const c = ac(); if (!c) return;
-    if (!buffers[k]) { loadSfx(); return SYN[k] && SYN[k](); }
+    const buf = buffers[pack + '/' + k];
+    if (!buf) { loadSfx(pack); return SYN[k] && SYN[k](); }
     const s = c.createBufferSource(), g = c.createGain(); g.gain.value = SFX_VOL[k] || .8;
-    s.buffer = buffers[k]; s.connect(g); g.connect(c.destination); s.start();
+    s.buffer = buf; s.connect(g); g.connect(c.destination); s.start();
   }
   // 아이폰(iOS 18+)은 스위치 체크박스를 누를 때 진동이 나는 걸 이용
   const hapLabel = (() => { const l = document.createElement('label'); l.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-9px'; l.innerHTML = '<input type="checkbox" switch>'; document.body.appendChild(l); return l; })();
@@ -385,9 +388,23 @@
     const n = new Set(S.days).size, page = Math.max(0, Math.floor((n - 1) / (window.GARDEN_PER || 32)));
     return `<section class="card garden"><div class="row between"><b>🌷 출석 정원</b><span class="muted">${n}일째 · 🔥 ${streak()}일 연속</span></div>
       <div class="gwrap"><canvas class="gcv" aria-label="출석 정원"></canvas></div>
-      <p class="muted" style="margin:8px 0 0;font-size:13px">${n ? `공부한 날마다 꽃이 하나씩 피어나요. 7번째마다 나무가 자라요!${page ? ` (정원 ${page + 1}번째)` : ''}` : '오늘 공부하면 첫 새싹이 심어져요 🌱'}</p></section>`;
+      ${friendsRow()}
+      <p class="muted" style="margin:8px 0 0;font-size:13px">${n ? `공부한 날마다 꽃이 하나씩 피어나요. 7번째마다 나무가 자라요!${page ? ` (정원 ${page + 1}번째)` : ''}` : '오늘 공부하면 첫 새싹이 심어져요 🌱'} 가끔 동물 친구가 놀러 와요. 보이면 눌러 봐요!</p></section>`;
   };
-  const mountGarden = () => app.querySelectorAll('.gcv').forEach(c => window.drawGarden && window.drawGarden(c, S.days, TODAY()));
+  const friendsRow = () => {
+    const A = window.GARDEN_ANIMALS || {}, f = S.friends || {};
+    const got = Object.keys(A).filter(k => f[k]).length;
+    return `<div class="friends"><span class="muted">만난 친구 ${got}/${Object.keys(A).length}</span>${Object.entries(A).map(([k, a]) => `<span class="fr ${f[k] ? 'on' : ''}" title="${f[k] ? a.name : '???'}">${f[k] ? a.emoji : '❔'}</span>`).join('')}</div>`;
+  };
+  function meetFriend(kind, an) {
+    S.friends = S.friends || {};
+    const first = !S.friends[kind];
+    S.friends[kind] = (S.friends[kind] || 0) + 1; save(); fx('pair');
+    if (first) { addXP(10); celebrate(`새 친구 발견! ${an.emoji}`, `${an.name}(이)가 정원에 놀러 왔어요!<br>도감에 등록했어요. ⭐+10`, an.emoji); }
+    else toast(`${an.emoji} ${an.name}: 안녕! (${S.friends[kind]}번째 만남)`);
+    app.querySelectorAll('.friends').forEach(el => { el.outerHTML = friendsRow(); });
+  }
+  const mountGarden = () => app.querySelectorAll('.gcv').forEach(c => window.drawGarden && window.drawGarden(c, S.days, TODAY(), { onTap: meetFriend }));
 
   // ── 오늘
   function Today() {
@@ -737,7 +754,9 @@
         <div class="chips" style="margin:10px 0 0">${[10, 15, 20, 30, 40].map(n => `<button class="chip ${S.daily === n ? 'on' : ''}" data-n="${n}">${n}개</button>`).join('')}</div>
         <p class="muted" style="margin-bottom:0">최소 10개씩! 다시 볼 단어도 같이 늘어나니까 처음엔 10개를 추천해요.</p></section>
       <section class="card"><b>🔔 소리와 진동</b>
-        <div class="chips" style="margin:10px 0 0"><button class="chip ${S.sfx !== false ? 'on' : ''}" id="tsfx">🎵 효과음 ${S.sfx !== false ? '켜짐' : '꺼짐'}</button><button class="chip ${S.hap !== false ? 'on' : ''}" id="thap">📳 진동 ${S.hap !== false ? '켜짐' : '꺼짐'}</button></div></section>
+        <p class="muted" style="margin:10px 0 6px">효과음 스타일 (누르면 미리 들어 볼 수 있어요)</p>
+        <div class="chips" style="margin:0 0 10px">${PACKS.map(([k, n]) => `<button class="chip pk ${packOf() === k ? 'on' : ''}" data-p="${k}">${n}</button>`).join('')}</div>
+        <div class="chips" style="margin:0"><button class="chip ${S.sfx !== false ? 'on' : ''}" id="tsfx">🎵 효과음 ${S.sfx !== false ? '켜짐' : '꺼짐'}</button><button class="chip ${S.hap !== false ? 'on' : ''}" id="thap">📳 진동 ${S.hap !== false ? '켜짐' : '꺼짐'}</button></div></section>
       ${alarmCard()}
       <section class="card"><b>📱 홈 화면에 추가하기</b>
         <p class="muted" style="margin-bottom:0">앱처럼 쓰려면 브라우저 메뉴에서 '홈 화면에 추가'를 누르세요. (아이폰: 사파리 공유 버튼 → 홈 화면에 추가) 기록은 이 휴대폰 브라우저에 저장돼요.</p></section>
@@ -746,9 +765,14 @@
     mountGarden();
     $('#who').onclick = () => root(Who);
     $('#alarm').onclick = addAlarm;
+    app.querySelectorAll('.chip.pk').forEach(c => c.onclick = () => {
+      S.pack = c.dataset.p; save(); loadSfx(S.pack);
+      app.querySelectorAll('.chip.pk').forEach(x => x.classList.toggle('on', x === c));
+      setTimeout(() => playSfx('ok', S.pack), 250); setTimeout(() => playSfx('pair', S.pack), 900);
+    });
     $('#tsfx').onclick = () => { S.sfx = S.sfx === false; save(); Stats(); if (S.sfx) fx('ok'); };
     $('#thap').onclick = () => { S.hap = S.hap === false; save(); Stats(); if (S.hap) buzz('ok'); };
-    app.querySelectorAll('.chip:not(.lv):not(#tsfx):not(#thap)').forEach(c => c.onclick = () => { S.daily = +c.dataset.n; save(); toast(`하루 새 단어 ${S.daily}개`); Stats(); });
+    app.querySelectorAll('.chip:not(.lv):not(.pk):not(#tsfx):not(#thap)').forEach(c => c.onclick = () => { S.daily = +c.dataset.n; save(); toast(`하루 새 단어 ${S.daily}개`); Stats(); });
     $('#reset').onclick = () => { if (confirm('모든 학습 기록을 지울까요? 되돌릴 수 없어요.')) { S = fresh(); save(); toast('초기화했어요'); Stats(); } };
   }
   Stats.tab = 'stats';

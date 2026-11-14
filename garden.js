@@ -19,13 +19,62 @@
     tulip: ['.P.P.P.', '.PPPPP.', '.PPPPP.', '..PPP..', '...G...', '.L.G.L.', '..LGL..', '...G...', '...G...'],
     daisy: ['..PPP..', '.PPCPP.', 'PPCCCPP', '.PPCPP.', '..PPP..', '...G...', '.L.G...', '..LG.L.', '...GL..', '...G...'],
     sunflower: ['..P.P.P..', '.PPPPPPP.', 'PPCCCCCPP', '.PCCCCCP.', 'PPCCCCCPP', '.PPPPPPP.', '..P.P.P..', '....G....', '..L.G....', '.LL.G.LL.', '....GLL..', '....G....', '....G....'],
+    rose: ['..PPP..', '.PCPPP.', '.PPCCP.', '..PPP..', '...G...', '.LLG...', '...GLL.', '..LG...', '...G...'],
+    lavender: ['...P...', '.P.CP.P', '.CP.P.C', '..PCPP.', '.P.C.P.', '..PGP..', '...G...', '.L.G.L.', '..LGL..', '...G...'],
     bell: ['...G...', '..GGG..', '.PPPPP.', 'PPPPPPP', 'P.P.P.P', '...G...', '.L.G.L.', '..LGL..', '...G...'],
     sapling: ['..TTT..', '.TTtTT.', '.TtTTT.', '..TTT..', '...B...', '...B...', '..LB...', '...B...'],
     tree: ['....TTTTT....', '..TTTTTtTTT..', '.TTtTTTTTTTT.', 'TTTTTTRTTtTTT', 'TTRTTTTTTTTTT', 'TTTTtTTTTTRTT', '.TTTTTTtTTTT.', '..kTTTTTTTk..', '....kTTTk....', '......B......', '......B......', '......B......', '.....BBB.....'],
     owl: ['e......e', 'ey....ye', 'yyyyyyyy', 'yWWyyWWy', 'yWKyyKWy', 'yyyooyyy', '.yppppy.', '.yppppy.', '..yyyy..', '..o..o..'],
     house: ['......RR......', '....RRRRRR....', '..RRRRRRRRRR..', 'RRRRRRRRRRRRRR', '.wwwwwwwwwwww.', '.wwbbwwwwKKww.', '.wwbbwwwwKKww.', '.wwwwwbbwwwww.', '.wwwwwbbwwwww.', '.wwwwwbbwwwww.'],
   };
-  const FLOWERS = ['tulip', 'daisy', 'bell', 'sunflower'];
+  const FLOWERS = ['tulip', 'daisy', 'bell', 'sunflower', 'rose', 'lavender', 'rose', 'lavender'];
+  const ROSES = [['#e63950', '#a8203a'], ['#ff7aa2', '#d94b78'], ['#fff1f4', '#f2b8c6'], ['#ffb347', '#e0812b']];
+
+
+  // ── 깜짝 손님 동물들 (오른쪽을 보는 모습, 다리는 2프레임)
+  const ANIMALS = {
+    cat: { name: '고양이', emoji: '🐱', w: 22, big: false, pal: { A: '#f4a259', a: '#d9822b', K: '#3b3456', P: '#ff9fb2' },
+      body: ['........A.A.', '........AAA.', 'A.......AKAP', '.A..AAAAAAA.', '..AAAAAAAAA.', '..AaAAAAaA..'],
+      legs: [['..A.A..A.A..'], ['...A.A..A.A.']] },
+    dog: { name: '강아지', emoji: '🐶', w: 22, big: false, pal: { A: '#c98b55', a: '#8a5a32', K: '#3b3456' },
+      body: ['........AAA..', '.......aAKAAK', 'A......aAAAA.', '.A.AAAAAAAA..', '..AAAAAAAAA..', '..AAAAAAAAA..'],
+      legs: [['..A.A...A.A..'], ['...A.A...A.A.']] },
+    pig: { name: '돼지', emoji: '🐷', w: 14, big: false, pal: { A: '#ffb3c6', a: '#e88aa6', P: '#e8789b', K: '#3b3456' },
+      body: ['...........A..', '..AAAAAAAAAAA.', 'aAAAAAAAAAAKAP', '.AAAAAAAAAAAAP', '.AAAAAAAAAAAA.', '..AAAAAAAAAA..'],
+      legs: [['..a.a....a.a..'], ['...a.a....a.a.']] },
+    cow: { name: '소', emoji: '🐮', w: 12, big: false, pal: { W: '#ffffff', K: '#3b3456', P: '#ffb3c6', y: '#e8d6a0' },
+      body: ['............y..y', '............WWWW', 'K...........WKWW', '.KWWKKWWWWWWWWPP', '..WWKKWWWKKWWWPP', '..WWWWWWWKKWWW..', '..WWWWWWWWWWWW..'],
+      legs: [['..K.K......K.K..'], ['...K.K......K.K.']] },
+    horse: { name: '말', emoji: '🐴', w: 10, big: false, pal: { A: '#a0683c', a: '#5a3a22', K: '#2b2238' },
+      body: ['............aA..', '...........aAAA.', '..........aAAKAA', 'a.........aAA...', '.a.AAAAAAAAAA...', '..AAAAAAAAAAA...', '..AAAAAAAAAA....'],
+      legs: [['..A.A....A.A....', '..A.A....A.A....'], ['...A.A..A.A.....', '...A.A..A.A.....']] },
+    bear: { name: '곰', emoji: '🐻', w: 8, big: false, pal: { A: '#8b5a2b', a: '#d9b38c', K: '#2b2238' },
+      body: ['..........A.A..', '.........AAAAA.', '..AAAAAAAAAKAa.', '.AAAAAAAAAAAAaK', '.AAAAAAAAAAAA..', '.AAAAAAAAAAAA..'],
+      legs: [['.AA.AA...AA.AA.'], ['..AA.AA.AA.AA..']] },
+    giraffe: { name: '기린', emoji: '🦒', w: 5, big: true, pal: { A: '#f6c768', a: '#b0702c', K: '#3b3456' },
+      body: ['...........a.a.', '...........AAA.', '..........AAKAA', '..........AA...', '..........aA...', '..........AA...', '..........Aa...', '..........AA...', '..........aA...', '..AAaAAaAAAA...', '.AAAAAaAAaAA...', 'a.AaAAAAAAaA...', '..AAAaAAaAA....'],
+      legs: [['..A.A....A.A...', '..A.A....A.A...', '..a.a....a.a...'], ['...A.A..A.A....', '...A.A..A.A....', '...a.a..a.a....']] },
+    elephant: { name: '코끼리', emoji: '🐘', w: 5, big: true, pal: { A: '#9aa3b5', a: '#7d8698', K: '#3b3456', W: '#fffbea' },
+      body: ['...........AAAA...', '..AAAAAAAAAAaaAA..', '.AAAAAAAAAAAaaKAA.', 'aAAAAAAAAAAAaaAAA.', '.AAAAAAAAAAAAAAAW.', '.AAAAAAAAAAAAA.A..', '.AAAAAAAAAAAAA.A..'],
+      legs: [['.AA.AA....AA.AA...', '.AA.AA....AA.AA...'], ['..AA.AA..AA.AA....', '..AA.AA..AA.AA....']] },
+  };
+  const HEART = ['.R.R.', 'RRRRR', 'RRRRR', '.RRR.', '..R..'];
+  function animalRows(an, frame, flip) {
+    const rows = [...an.body, ...an.legs[frame]];
+    const wd = Math.max(...rows.map(r => r.length));
+    const pad = rows.map(r => r.padEnd(wd, '.'));
+    return flip ? pad.map(r => [...r].reverse().join('')) : pad;
+  }
+  function pickAnimal() {
+    const ks = Object.keys(ANIMALS), tot = ks.reduce((s, k) => s + ANIMALS[k].w, 0);
+    let r = Math.random() * tot; for (const k of ks) { r -= ANIMALS[k].w; if (r <= 0) return k; } return 'cat';
+  }
+  function spawn(state, atRandomX) {
+    const kind = pickAnimal(), an = ANIMALS[kind], dir = Math.random() < .5 ? 1 : -1;
+    const lanes = an.big ? [GROUND_Y + 1] : [GROUND_Y + 13, GROUND_Y + 28, GROUND_Y + 43, H - 3];
+    state.v = { kind, dir, x: atRandomX ? 30 + Math.random() * (W - 60) : (dir > 0 ? -22 : W + 4), y: lanes[(Math.random() * lanes.length) | 0], speed: an.big ? .5 : .8 + Math.random() * .5, step: 0, jump: 0, heart: 0, pause: 0 };
+  }
+  window.GARDEN_ANIMALS = Object.fromEntries(Object.entries(ANIMALS).map(([k, a]) => [k, { name: a.name, emoji: a.emoji }]));
 
   function hash(n) { n = (n ^ 61) ^ (n >>> 16); n = n + (n << 3); n = n ^ (n >>> 4); n = Math.imul(n, 0x27d4eb2d); return (n ^ (n >>> 15)) >>> 0; }
 
@@ -57,13 +106,23 @@
     if (isTree) return { rows: age >= 3 ? S.tree : age >= 1 ? S.sapling : S.sprout, pal: {}, w: age >= 3 ? 13 : age >= 1 ? 7 : 5 };
     if (age <= 0) return { rows: S.sprout, pal: {}, w: 5, fresh: true };
     const petal = PETALS[h % PETALS.length];
-    if (age === 1) return { rows: S.bud, pal: { P: petal }, w: 5 };
+    if (age === 1) return { rows: S.bud, pal: { P: ['rose', 'lavender'].includes(FLOWERS[(h >>> 4) % FLOWERS.length]) ? (FLOWERS[(h >>> 4) % FLOWERS.length] === 'rose' ? ROSES[(h >>> 9) % ROSES.length][0] : '#9b7bd8') : petal }, w: 5 };
     const kind = FLOWERS[(h >>> 4) % FLOWERS.length];
+    if (kind === 'rose') { const [p, c] = ROSES[(h >>> 9) % ROSES.length]; return { rows: S.rose, pal: { P: p, C: c }, w: 7 }; }
+    if (kind === 'lavender') return { rows: S.lavender, pal: { P: '#9b7bd8', C: '#c3a6f5' }, w: 7 };
     const center = kind === 'sunflower' ? '#7a4a2a' : '#ffd23f';
     return { rows: S[kind], pal: { P: kind === 'sunflower' ? '#ffd23f' : petal, C: center }, w: S[kind][0].length };
   }
 
-  function draw(ctx, days, today, t) {
+  function drawVisitor(ctx, v) {
+    const an = ANIMALS[v.kind]; const rows = animalRows(an, ((v.step / 3) | 0) % 2, v.dir < 0);
+    const jy = v.jump > 0 ? -Math.round(Math.sin((v.jump / 10) * Math.PI) * 5) : 0;
+    v.box = { x: v.x, y: v.y - rows.length + 1 + jy, w: rows[0].length, h: rows.length };
+    sprite(ctx, rows, Math.round(v.x), v.box.y, an.pal);
+    if (v.heart > 0) sprite(ctx, HEART, Math.round(v.x + rows[0].length / 2 - 2), v.box.y - 7 - ((20 - v.heart) / 4 | 0), { R: '#ff5a6e' });
+  }
+
+  function draw(ctx, days, today, t, state) {
     const hour = new Date().getHours();
     const sky = skyColors(hour);
     // 하늘 (도트 디더링 그라데이션)
@@ -92,6 +151,8 @@
     for (let i = 0; i < 170; i++) { const h = hash(i * 31 + 7); const x = h % W, y = GROUND_Y + 2 + ((h >>> 9) % (H - GROUND_Y - 3)); px(ctx, x, y, 1, 2, sky.night ? '#285c33' : (h & 1 ? '#69bd4f' : '#93dd72')); }
     // 오솔길
     for (let y = GROUND_Y; y < H; y++) { const w = 6 + (y - GROUND_Y) * 0.18; px(ctx, 18 - w / 2 + (y - GROUND_Y) * 0.05, y, w, 1, sky.night ? '#6b5a3c' : '#e9cf98'); }
+    // 큰 동물은 울타리 뒤 언덕길로
+    if (state && state.v && ANIMALS[state.v.kind].big) drawVisitor(ctx, state.v);
     // 집 + 울타리
     sprite(ctx, S.house, 6, GROUND_Y - 6, sky.night ? { w: '#d8cfb5', K: '#ffe08a' } : {});
     for (let x = 26; x < W; x += 6) { px(ctx, x, GROUND_Y + 2, 2, 8, '#fff8ea'); px(ctx, x, GROUND_Y + 1, 2, 1, '#f1e4c6'); }
@@ -107,7 +168,9 @@
     const items = shown.map((d, k) => ({ d, k, idx: page * PER + k, ...plotPos(k) }));
     // 빈 화단 자리 표시 (흙)
     for (let k = 0; k < PER; k++) { const p = plotPos(k); px(ctx, p.x - 4, p.y, 9, 2, sky.night ? '#4a3420' : '#9a6a3a'); px(ctx, p.x - 3, p.y + 2, 7, 1, sky.night ? '#3a2818' : '#7d5530'); }
+    const vis = state && state.v && !ANIMALS[state.v.kind].big ? state.v : null; let visDrawn = false;
     for (const it of items) {
+      if (vis && !visDrawn && it.y > vis.y) { drawVisitor(ctx, vis); visDrawn = true; }
       const age = today - it.d;
       const pl = plantFor(it.d, it.idx, age);
       const sway = pl.rows.length > 6 && !sky.night ? Math.round(Math.sin(t / 600 + it.k) * 0.6) : 0;
@@ -117,6 +180,7 @@
         [[-5, -6], [5, -8], [0, -10]].forEach(([dx, dy], j) => { if ((f + j) % 2) px(ctx, it.x + dx, it.y + dy, 1, 1, '#fff7a8'); });
       }
     }
+    if (vis && !visDrawn) drawVisitor(ctx, vis);
     // 나비(낮) / 반딧불(밤)
     const n = Math.min(6, 1 + Math.floor(sorted.length / 5));
     for (let i = 0; i < n; i++) {
@@ -129,18 +193,41 @@
   }
 
   // 공개 함수: canvas에 정원을 그리고 애니메이션
-  window.drawGarden = function (canvas, days, today) {
+  window.drawGarden = function (canvas, days, today, opts = {}) {
     canvas.width = W; canvas.height = H;
     const ctx = canvas.getContext('2d'); ctx.imageSmoothingEnabled = false;
-    let info = draw(ctx, days, today, performance.now());
+    const state = { v: null };
+    if (Math.random() < (opts.firstChance ?? .2)) spawn(state, true);
+    let info = draw(ctx, days, today, performance.now(), state);
     let last = 0;
+    const tick = () => {
+      const v = state.v;
+      if (!v) { if (Math.random() < (opts.chance ?? 1 / 260)) spawn(state); return; }
+      if (v.heart > 0) v.heart--;
+      if (v.jump > 0) v.jump--;
+      if (v.pause > 0) { v.pause--; return; }
+      v.x += v.dir * v.speed; v.step++;
+      if (!ANIMALS[v.kind].big && Math.random() < .006) v.pause = 18;          // 가끔 멈춰서 두리번
+      if (v.x < -30 || v.x > W + 30) state.v = null;
+    };
     const loop = now => {
       if (!canvas.isConnected) return;
-      if (now - last > 110) { last = now; draw(ctx, days, today, now); }
+      if (now - last > 110) { last = now; tick(); draw(ctx, days, today, now, state); }
       requestAnimationFrame(loop);
     };
     requestAnimationFrame(loop);
+    canvas.addEventListener('click', e => {
+      const v = state.v; if (!v || !v.box) return;
+      const r = canvas.getBoundingClientRect();
+      const x = (e.clientX - r.left) * W / r.width, y = (e.clientY - r.top) * H / r.height;
+      const b = v.box, m = 5;
+      if (x >= b.x - m && x <= b.x + b.w + m && y >= b.y - m && y <= b.y + b.h + m) {
+        v.jump = 10; v.heart = 20; v.pause = 14;
+        opts.onTap && opts.onTap(v.kind, ANIMALS[v.kind]);
+      }
+    });
     return info;
   };
+  window.gardenSummon = null;
   window.GARDEN_PER = PER;
 })();
