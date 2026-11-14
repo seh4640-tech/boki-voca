@@ -248,3 +248,8 @@ body{background:var(--bg) radial-gradient(#f3e3d3 1.2px,transparent 1.2px) 0 0/2
 .danger{color:#c4687a}
 #toast{background:var(--navy);border-radius:99px}
 .legend span{font-size:13px}
+a.btn{text-decoration:none;box-sizing:border-box}
+.alarm{background:linear-gradient(140deg,#fff7e6,#fff)}
+.alarm summary{cursor:pointer}
+.alarm-tip{display:block;width:100%;text-align:left;background:#fff;border-radius:18px;padding:14px 16px;font-size:14px;box-shadow:0 3px 0 #f1e6dc;margin-bottom:14px}
+.alarm-tip b{color:var(--navy)}

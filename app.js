@@ -1,11 +1,11 @@
-/* 수능 영단어 — 간격 반복 암기 웹앱 (기록은 이 기기 브라우저에 저장) */
+/* 보키랑 영단어 — 간격 반복 암기 웹앱 (기록은 이 기기 브라우저에 저장) */
 (() => {
   const POS = { n: '명', v: '동', a: '형', ad: '부', conj: '접' };
   const SET_SIZE = 40;
   // 상자(box)별 다음 복습까지 걸리는 날 수
   const INTERVAL = [0, 1, 3, 7, 15, 30, 60, 120, 240];
   const MAXBOX = INTERVAL.length - 1;
-  const LEVEL = ['중학', '고등 기본', '수능 실력', '수능 고난도'];
+  const LEVEL = ['1단계', '2단계', '3단계', '4단계'];
 
   function shuffleWith(arr, rnd) { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
   const shuffle = a => shuffleWith(a, Math.random);
@@ -98,7 +98,7 @@
     { id: 'w50', icon: '📗', name: '단어 50', desc: '단어 50개 심기', ok: () => learned().length >= 50 },
     { id: 'w100', icon: '📘', name: '단어 100', desc: '단어 100개 배우기', ok: () => learned().length >= 100 },
     { id: 'w300', icon: '📙', name: '단어 300', desc: '단어 300개 배우기', ok: () => learned().length >= 300 },
-    { id: 'w700', icon: '🎓', name: '중학 단어 정복', desc: '중학 단어 모두 배우기', ok: () => ordered.filter(o => o.lv === 0).every(o => card(o.w)) },
+    { id: 'w700', icon: '🎓', name: '1단계 정복', desc: '1단계 단어 모두 심기', ok: () => ordered.filter(o => o.lv === 0).every(o => card(o.w)) },
     { id: 'w1000', icon: '📚', name: '단어 1000', desc: '단어 1000개 배우기', ok: () => learned().length >= 1000 },
     { id: 'all', icon: '👑', name: '전설의 단어장', desc: '모든 단어 배우기', ok: () => learned().length >= ordered.length },
     { id: 'd3', icon: '🔥', name: '3일 연속', desc: '3일 연속 출석', ok: () => streak() >= 3 },
@@ -151,6 +151,38 @@
   }
   const comboHTML = () => combo >= 3 ? `<span class="combo">🔥 ${combo}연속!</span>` : '';
   
+
+
+  // ── 공부 알림: 휴대폰 캘린더에 매일 23:00, 23:30 알림 추가
+  function icsFile() {
+    const url = location.origin + location.pathname;
+    const now = new Date(), y = now.getFullYear(), mo = String(now.getMonth() + 1).padStart(2, '0'), d = String(now.getDate()).padStart(2, '0');
+    const stamp = now.toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+    const ev = (uid, hm, title, msg) => [
+      'BEGIN:VEVENT', `UID:${uid}-${P.cur}@boki-voca`, `DTSTAMP:${stamp}`,
+      `DTSTART;TZID=Asia/Seoul:${y}${mo}${d}T${hm}00`, `DURATION:PT10M`, 'RRULE:FREQ=DAILY',
+      `SUMMARY:${title}`, `DESCRIPTION:${msg}\\n${url}`, `URL:${url}`,
+      'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${title}`, 'TRIGGER:PT0M', 'END:VALARM', 'END:VEVENT'];
+    return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//boki-voca//KO', 'CALSCALE:GREGORIAN',
+      'BEGIN:VTIMEZONE', 'TZID:Asia/Seoul', 'BEGIN:STANDARD', 'DTSTART:19700101T000000', 'TZOFFSETFROM:+0900', 'TZOFFSETTO:+0900', 'TZNAME:KST', 'END:STANDARD', 'END:VTIMEZONE',
+      ...ev('boki-2300', '2300', '🦉 보키랑 영단어 할 시간!', '오늘의 미션 5분만 하자'),
+      ...ev('boki-2330', '2330', '🦉 오늘 미션 했어요?', '아직이면 지금 딱 5분만!'),
+      'END:VCALENDAR'].join('\r\n');
+  }
+  function addAlarm() {
+    const blob = new Blob([icsFile()], { type: 'text/calendar;charset=utf-8' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'boki-alarm.ics';
+    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    S.alarm = true; save(); toast('캘린더에 추가하면 매일 밤 알려 줄게요!');
+  }
+  const googleCal = (hm, title) => `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&details=${encodeURIComponent(location.origin + location.pathname)}&dates=${(() => { const n = new Date(), s = `${n.getFullYear()}${String(n.getMonth() + 1).padStart(2, '0')}${String(n.getDate()).padStart(2, '0')}`; return `${s}T${hm}00/${s}T${hm.slice(0, 2)}${String(+hm.slice(2) + 10).padStart(2, '0')}00`; })()}&ctz=Asia/Seoul&recur=${encodeURIComponent('RRULE:FREQ=DAILY')}`;
+  const alarmCard = () => `<section class="card alarm"><b>⏰ 공부 알림</b>
+      <p class="muted" style="margin:6px 0 12px">매일 밤 <b>11시</b>, <b>11시 30분</b>에 휴대폰으로 알려 줄게요. 알림을 누르면 바로 앱이 열려요.</p>
+      <button class="btn accent" id="alarm">${S.alarm ? '알림 다시 추가하기' : '📅 휴대폰에 알림 추가하기'}</button>
+      <details style="margin-top:10px"><summary class="muted">안드로이드에서 잘 안 되면?</summary>
+        <p class="muted">구글 캘린더로 하나씩 추가해 주세요. 저장할 때 알림을 '일정 시작 시간'으로 바꾸면 정확한 시간에 울려요.</p>
+        <div class="btns"><a class="btn light" target="_blank" rel="noopener" href="${googleCal('2300', '🦉 보키랑 영단어 할 시간!')}">밤 11시</a><a class="btn light" target="_blank" rel="noopener" href="${googleCal('2330', '🦉 오늘 미션 했어요?')}">밤 11시 30분</a></div></details>
+      <p class="muted" style="margin:10px 0 0;font-size:12.5px">아이폰: 파일이 열리면 '모두 추가' → 캘린더에 저장돼요.</p></section>`;
 
   // ── 발음
   const canSpeak = 'speechSynthesis' in window;
@@ -292,6 +324,7 @@
         <b>🎮 놀면서 외우기</b>
         <div class="modes">${PRACTICE_MODES.map(m => `<button class="mode" data-m="${m.id}"><span>${m.icon}</span>${m.name}</button>`).join('')}</div>
       </section>`;
+    if (!S.alarm) { app.insertAdjacentHTML('beforeend', `<button class="alarm-tip" id="atip">⏰ 매일 밤 11시에 보키가 알려 줄까요? <b>알림 켜기 ›</b></button>`); $('#atip').onclick = () => root(Stats); }
     const st0 = $('#start'); if (st0) st0.onclick = () => go(Session, false);
     const mo = $('#more'); if (mo) mo.onclick = () => go(Session, true);
     app.querySelectorAll('.mode').forEach(b => b.onclick = () => go(PracticeSource, b.dataset.m));
@@ -548,10 +581,12 @@
       <section class="card"><b>✨ 하루에 배울 새 단어</b>
         <div class="chips" style="margin:10px 0 0">${[5, 10, 20, 30, 40].map(n => `<button class="chip ${S.daily === n ? 'on' : ''}" data-n="${n}">${n}개</button>`).join('')}</div>
         <p class="muted" style="margin-bottom:0">처음엔 10개면 충분해요! 다시 볼 단어도 같이 늘어나니까 무리하지 마세요.</p></section>
+      ${alarmCard()}
       <section class="card"><b>📱 홈 화면에 추가하기</b>
         <p class="muted" style="margin-bottom:0">앱처럼 쓰려면 브라우저 메뉴에서 '홈 화면에 추가'를 누르세요. (아이폰: 사파리 공유 버튼 → 홈 화면에 추가) 기록은 이 휴대폰 브라우저에 저장돼요.</p></section>
       <button class="danger" id="reset">처음부터 다시 하기 (기록 지우기)</button>`;
     $('#who').onclick = () => root(Who);
+    $('#alarm').onclick = addAlarm;
     app.querySelectorAll('.chip.lv').forEach(c => c.onclick = () => { S.start = +c.dataset.k; save(); toast(`${LEVEL[S.start]} 단어부터 새로 나와요`); Stats(); });
     app.querySelectorAll('.chip:not(.lv)').forEach(c => c.onclick = () => { S.daily = +c.dataset.n; save(); toast(`하루 새 단어 ${S.daily}개`); Stats(); });
     $('#reset').onclick = () => { if (confirm('모든 학습 기록을 지울까요? 되돌릴 수 없어요.')) { S = fresh(); S.start = me().start || 0; save(); toast('초기화했어요'); Stats(); } };
@@ -585,9 +620,9 @@
       <details class="card addp"><summary>+ 다른 사람 추가하기</summary>
         <input class="search" id="nm" maxlength="10" placeholder="이름 (예: 민준)" style="margin:12px 0">
         <div class="chips">${EMOJIS.map((e, k) => `<button class="chip em ${k === 0 ? 'on' : ''}" data-e="${e}">${e}</button>`).join('')}</div>
-        <div class="course"><button class="crs on" data-s="0"><b>중학생 코스</b><small>중학 단어부터 차근차근</small></button>
-          <button class="crs" data-s="1"><b>고등학생 코스</b><small>고등 단어부터 (중학 단어는 나중에)</small></button></div>
-        <p class="muted">영어가 어렵다면 고등학생이어도 중학생 코스로 시작하는 걸 추천해요. 나중에 '기록'에서 바꿀 수 있어요.</p>
+        <div class="course"><button class="crs on" data-s="0"><b>1단계부터</b><small>처음부터 차근차근 (추천)</small></button>
+          <button class="crs" data-s="1"><b>2단계부터</b><small>기초 단어를 이미 잘 알아요</small></button></div>
+        <p class="muted">단계는 나중에 '내 정원'에서 바꿀 수 있어요.</p>
         <button class="btn accent" id="add">시작하기 ›</button></details>`;
     let emo = EMOJIS[0], st = 0;
     app.querySelectorAll('.chip.em').forEach(c => c.onclick = () => { app.querySelectorAll('.chip.em').forEach(x => x.classList.remove('on')); c.classList.add('on'); emo = c.dataset.e; });
@@ -596,7 +631,7 @@
     $('#add').onclick = () => {
       const name = $('#nm').value.trim(); if (!name) { toast('이름을 써 주세요'); $('#nm').focus(); return; }
       const id = Date.now().toString(36);
-      P.list.push({ id, name, emoji: emo, start: st, course: st ? '고등학생' : '중학생' }); P.cur = id; saveP();
+      P.list.push({ id, name, emoji: emo, start: st, course: '' }); P.cur = id; saveP();
       S = fresh(); S.start = st; save(); root(Today);
     };
   }
