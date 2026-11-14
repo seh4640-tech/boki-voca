@@ -95,7 +95,8 @@
     g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + .012); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     o.connect(g); g.connect(c.destination); o.start(t); o.stop(t + dur + .02);
   }
-  const SFX = {
+  // 효과음 파일: uisfx (CC0) rubber·arcade 팩. 못 불러오면 합성음으로 대신
+  const SYN = {
     tap: () => tone(660, 0, .07, 'sine', .07, 880),
     ok: () => { tone(784, 0, .12, 'triangle', .16); tone(1175, .09, .2, 'triangle', .16); },
     ng: () => { tone(330, 0, .16, 'sine', .14, 220); tone(262, .13, .22, 'sine', .12, 196); },
@@ -104,16 +105,31 @@
     combo: () => [784, 988, 1175, 1568].forEach((f, k) => tone(f, k * .06, .12, 'triangle', .11)),
     fanfare: () => [523, 659, 784, 1047, 784, 1047].forEach((f, k) => tone(f, k * .1, k === 5 ? .45 : .14, 'triangle', .15)),
   };
+  SYN.levelup = SYN.badge = SYN.complete = SYN.fanfare;
+  const SFX_VOL = { tap: .5, flip: .6, ok: .8, ng: .7, pair: .8, combo: .9, levelup: 1, badge: 1, complete: 1 };
+  const buffers = {}; let sfxLoading = false;
+  function loadSfx() {
+    if (sfxLoading) return; const c = ac(); if (!c) return; sfxLoading = true;
+    Object.keys(SFX_VOL).forEach(k => fetch(`sfx/${k}.mp3`).then(r => r.arrayBuffer())
+      .then(b => new Promise((ok, ng) => c.decodeAudioData(b, ok, ng))).then(buf => { buffers[k] = buf; }).catch(() => {}));
+  }
+  function playSfx(k) {
+    const c = ac(); if (!c) return;
+    if (!buffers[k]) { loadSfx(); return SYN[k] && SYN[k](); }
+    const s = c.createBufferSource(), g = c.createGain(); g.gain.value = SFX_VOL[k] || .8;
+    s.buffer = buffers[k]; s.connect(g); g.connect(c.destination); s.start();
+  }
   // 아이폰(iOS 18+)은 스위치 체크박스를 누를 때 진동이 나는 걸 이용
   const hapLabel = (() => { const l = document.createElement('label'); l.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-9px'; l.innerHTML = '<input type="checkbox" switch>'; document.body.appendChild(l); return l; })();
-  const VIB = { tap: 8, ok: 25, ng: [40, 60, 40], pair: 15, flip: 8, combo: [20, 40, 20], fanfare: [30, 60, 30, 60, 60] };
+  const VIB = { tap: 8, ok: 25, ng: [40, 60, 40], pair: 15, flip: 8, combo: [20, 40, 20], levelup: [30, 60, 30, 60, 60], badge: [30, 60, 30, 60, 60], complete: [30, 60, 30, 60, 60] };
   function buzz(kind) {
     if (!hapOn()) return;
     if (navigator.vibrate) { navigator.vibrate(VIB[kind] || 10); return; }
-    hapLabel.click(); if (kind === 'ng' || kind === 'fanfare' || kind === 'combo') setTimeout(() => hapLabel.click(), 120);
+    hapLabel.click(); if (kind === 'ng' || kind === 'combo' || kind === 'levelup' || kind === 'badge' || kind === 'complete') setTimeout(() => hapLabel.click(), 120);
   }
-  function fx(kind) { if (sfxOn()) try { SFX[kind](); } catch {} buzz(kind); }
+  function fx(kind) { if (sfxOn()) try { playSfx(kind); } catch {} buzz(kind); }
   document.addEventListener('pointerdown', e => {
+    loadSfx();
     const b = e.target.closest('button, a.btn, .tile, .opt');
     if (!b || b.disabled || b.closest('.opt') || b.classList.contains('tile')) return;
     fx('tap');
@@ -126,7 +142,7 @@
   const titleOf = n => n <= TITLES.length ? TITLES[n - 1] : `${TITLES[TITLES.length - 1]} ${'★'.repeat(Math.min(5, n - TITLES.length))}`;
   function addXP(n) {
     const before = levelOf(S.xp || 0); S.xp = (S.xp || 0) + n; const after = levelOf(S.xp);
-    if (after > before) celebrate(`레벨 업! Lv.${after}`, `이제 '${titleOf(after)}'이에요!`, '⬆️');
+    if (after > before) celebrate(`레벨 업! Lv.${after}`, `이제 '${titleOf(after)}'이에요!`, '⬆️', 'levelup');
   }
   const longCnt = () => ordered.filter(o => stage(o.w) === 3).length;
   const BADGES = [
@@ -161,10 +177,10 @@
   }
   // 축하 팝업 (여러 개면 차례로)
   const popQ = []; let popOn = false;
-  function celebrate(title, body, icon) { popQ.push({ title, body, icon }); if (!popOn) nextPop(); }
+  function celebrate(title, body, icon, kind = 'badge') { popQ.push({ title, body, icon, kind }); if (!popOn) nextPop(); }
   function nextPop() {
     const p = popQ.shift(); if (!p) { popOn = false; return; }
-    popOn = true; confetti(); fx('fanfare');
+    popOn = true; confetti(); fx(p.kind);
     const el = document.createElement('div'); el.className = 'pop';
     el.innerHTML = `<div class="pop-card"><div class="pop-icon">${p.icon}</div><b>${p.title}</b><p>${p.body}</p><button class="btn accent">좋아요!</button></div>`;
     document.body.appendChild(el);
@@ -473,7 +489,7 @@
     };
     const summary = () => {
       const list = [...wrongs].map(w => byWord[w]);
-      if (!q.length && !finished) { finished = true; fx('fanfare'); S.st.sessions++; addXP(30); if (ngN === 0 && okN >= 10) S.st.perfect++; save(); confetti(); checkBadges(); }
+      if (!q.length && !finished) { finished = true; fx('complete'); S.st.sessions++; addXP(30); if (ngN === 0 && okN >= 10) S.st.perfect++; save(); confetti(); checkBadges(); }
       app.innerHTML = `${boki(q.length ? '여기까지 저장했어! 다음에 이어서 하자 😊' : okN >= ngN * 3 ? '오늘 완전 잘했어! 내일 또 만나 🦉' : '수고했어! 틀린 단어는 내일 내가 다시 물어볼게')}<section class="card center">
         <p class="muted">${q.length ? '여기까지 저장했어요' : '오늘 미션 완료! 🎉'}</p>
         <div class="score">${okN}<span style="font-size:22px;color:var(--sub)"> 정답</span></div>
@@ -697,7 +713,7 @@
       ${alarmCard()}
       <section class="card"><b>📱 홈 화면에 추가하기</b>
         <p class="muted" style="margin-bottom:0">앱처럼 쓰려면 브라우저 메뉴에서 '홈 화면에 추가'를 누르세요. (아이폰: 사파리 공유 버튼 → 홈 화면에 추가) 기록은 이 휴대폰 브라우저에 저장돼요.</p></section>
-      <p class="muted center" style="font-size:11.5px">발음 녹음: Free Dictionary API · Wiktionary (CC BY-SA)</p>
+      <p class="muted center" style="font-size:11.5px">발음 녹음: Wikimedia Commons (CC BY-SA) · 효과음: uisfx (CC0)</p>
       <button class="danger" id="reset">처음부터 다시 하기 (기록 지우기)</button>`;
     $('#who').onclick = () => root(Who);
     $('#alarm').onclick = addAlarm;
