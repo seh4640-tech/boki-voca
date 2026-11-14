@@ -256,3 +256,17 @@ a.btn{text-decoration:none;box-sizing:border-box}
 .boki.small .boki-svg{width:46px;height:46px}
 .boki.small .bubble{font-size:14px;padding:9px 12px}
 .boki.small{margin:10px 0}
+/* 단어 크게 */
+.face .word{font-size:52px}
+.face .word.sm{font-size:24px}
+.face .mean{font-size:30px}
+.q-word{font-size:50px;margin:22px 0 8px}
+.q-word.ko{font-size:32px}
+.q-pos{min-height:8px}
+.opt{font-size:18px;padding:16px 14px}
+.wlist .w{font-size:21px}
+.wlist .m{font-size:15px}
+.tile.en{font-size:19px}
+.tile.ko{font-size:15px}
+.spell{font-size:28px}
+.answer{font-size:20px}

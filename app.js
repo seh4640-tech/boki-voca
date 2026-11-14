@@ -302,13 +302,13 @@
       onAnswer(ok, mode);
       fx(ok ? (combo >= 3 && combo % 5 === 0 ? 'combo' : 'ok') : 'ng');
       if (ok) { const af = host.querySelector('.after'); if (af) af.innerHTML = `<p class="cheer">${pick(CHEER_OK)} ${comboHTML()}</p>`; setTimeout(() => done(true), mode === 'spell' ? 800 : 700); return; }
-      host.querySelector('.after').innerHTML = `<p class="cheer ng">${pick(CHEER_NG)}</p><p class="answer">${esc(o.w)} <span>${posLabel(o.p)}</span> = ${esc(o.m)}</p>${extra}<button class="btn next" id="nx">다음 ›</button>`;
+      host.querySelector('.after').innerHTML = `<p class="cheer ng">${pick(CHEER_NG)}</p><p class="answer">${esc(o.w)} = ${esc(o.m)}</p>${extra}<button class="btn next" id="nx">다음 ›</button>`;
       host.querySelector('#nx').onclick = () => done(false);
       host.querySelector('#nx').focus();
     };
     if (mode === 'intro') {
       host.innerHTML = `<div class="flash" id="card"><div class="inner">
-          <div class="face"><span class="tag">✨ 새 단어</span><button class="say" id="say">🔊</button><div class="word">${esc(o.w)}</div><div class="pos">${posLabel(o.p)}</div><div class="hint">탭해서 뜻 보기</div></div>
+          <div class="face"><span class="tag">✨ 새 단어</span><button class="say" id="say">🔊</button><div class="word">${esc(o.w)}</div><div class="hint">탭해서 뜻 보기</div></div>
           <div class="face back"><span class="tag">✨ 새 단어</span><div class="word sm">${esc(o.w)}</div><div class="mean">${esc(o.m)}</div><div class="hint">소리 내어 3번 읽어 보세요</div></div>
         </div></div><button class="btn" id="got">외웠어요 ›</button>`;
       const c = host.querySelector('#card');
@@ -321,7 +321,7 @@
     if (mode === 'spell') {
       host.innerHTML = `<span class="tag">${MODE_NAME.spell}</span>
         <div class="q-word ko">${esc(o.m)}</div>
-        <div class="q-pos">${posLabel(o.p)} · ${o.w.length}글자</div><div class="hintline" id="hl"></div>
+        <div class="q-pos">${o.w.length}글자</div><div class="hintline" id="hl"></div>
         <input class="spell" id="sp" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="영어로 쓰세요">
         <div class="btns3" style="margin-top:10px"><button class="btn light" id="giveup">몰라요</button><button class="btn light" id="hint">💡 힌트</button><button class="btn" id="chk">확인</button></div>
         <div class="after"></div>`;
@@ -346,8 +346,8 @@
     const opts = choicesFor(o, showKo ? 'w' : 'm');
     const head = mode === 'listen'
       ? `<button class="bigsay" id="say">🔊</button><div class="q-pos">잘 듣고 뜻을 고르세요</div>`
-      : showKo ? `<div class="q-word ko">${esc(o.m)}</div><div class="q-pos">${posLabel(o.p)}</div>`
-        : `<div class="q-word">${esc(o.w)}</div><div class="q-pos">${posLabel(o.p)} · <button class="toggle" id="say">🔊 듣기</button></div>`;
+      : showKo ? `<div class="q-word ko">${esc(o.m)}</div><div class="q-pos"></div>`
+        : `<div class="q-word">${esc(o.w)}</div><div class="q-pos"><button class="toggle" id="say">🔊 듣기</button></div>`;
     host.innerHTML = `<span class="tag">${MODE_NAME[mode]}</span>${head}
       <div class="opts">${opts.map((x, n) => `<button class="opt" data-w="${esc(x.w)}"><span class="n">${n + 1}</span>${esc(showKo ? x.w : x.m)}</button>`).join('')}</div>
       <div class="after"></div>`;
@@ -579,7 +579,7 @@
       app.innerHTML = `<div class="progress-top"><span>${i + 1} / ${deck.length}</span><span>알아요 ${ok}</span></div>
         <div class="bar" style="margin-bottom:12px"><i style="width:${i / deck.length * 100}%"></i></div>
         <div class="flash" id="card"><div class="inner">
-          <div class="face"><button class="say" id="say">🔊</button><div class="word">${esc(o.w)}</div><div class="pos">${posLabel(o.p)}</div><div class="hint">탭해서 뜻 보기</div></div>
+          <div class="face"><button class="say" id="say">🔊</button><div class="word">${esc(o.w)}</div><div class="hint">탭해서 뜻 보기</div></div>
           <div class="face back"><div class="word sm">${esc(o.w)}</div><div class="mean">${esc(o.m)}</div></div>
         </div></div>
         <div class="judge"><button class="no" id="no">모르겠어요</button><button class="yes" id="yes">알아요</button></div>`;
@@ -649,7 +649,7 @@
         <div class="modes" style="margin-top:12px">${PRACTICE_MODES.map(m => `<button class="mode" data-m="${m.id}"><span>${m.icon}</span>${m.name}</button>`).join('')}</div></section>
         <section class="card"><div class="row between" style="margin-bottom:4px"><b>단어 목록</b><button class="toggle" id="hide">${hideMean ? '뜻 보이기' : '뜻 가리기'}</button></div>
         <ul class="wlist">${list.map(o => `<li><button class="say" data-w="${esc(o.w)}">🔊</button>${dot(o.w)}
-          <span class="w">${esc(o.w)}<span class="p">${posLabel(o.p)}</span></span><span class="m ${hideMean ? 'hide' : ''}">${esc(o.m)}</span></li>`).join('')}</ul></section>`;
+          <span class="w">${esc(o.w)}</span><span class="m ${hideMean ? 'hide' : ''}">${esc(o.m)}</span></li>`).join('')}</ul></section>`;
       app.querySelectorAll('.mode').forEach(b => b.onclick = () => go(PracticeSource, b.dataset.m, list, `세트 ${k + 1}`));
       $('#hide').onclick = () => { hideMean = !hideMean; draw(); };
       app.querySelectorAll('.say').forEach(b => b.onclick = () => speak(b.dataset.w));
