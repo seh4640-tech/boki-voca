@@ -253,3 +253,6 @@ a.btn{text-decoration:none;box-sizing:border-box}
 .alarm summary{cursor:pointer}
 .alarm-tip{display:block;width:100%;text-align:left;background:#fff;border-radius:18px;padding:14px 16px;font-size:14px;box-shadow:0 3px 0 #f1e6dc;margin-bottom:14px}
 .alarm-tip b{color:var(--navy)}
+.boki.small .boki-svg{width:46px;height:46px}
+.boki.small .bubble{font-size:14px;padding:9px 12px}
+.boki.small{margin:10px 0}

@@ -185,14 +185,47 @@
       <p class="muted" style="margin:10px 0 0;font-size:12.5px">아이폰: 파일이 열리면 '모두 추가' → 캘린더에 저장돼요.</p></section>`;
 
   // ── 발음
-  const canSpeak = 'speechSynthesis' in window;
+  // 1순위: 원어민 녹음(audio.js), 2순위: 기기의 가장 자연스러운 영어 음성
+  const CM = 'https://upload.wikimedia.org/wikipedia/commons/transcoded';
+  const AUD = typeof AUDIO === 'object' ? AUDIO : {};
+  const audioUrl = w => {
+    const v = AUD[w]; if (!v) return null;
+    if (v[0] === '#') { const f = `En-us-${w}.ogg`; return `${CM}/${v[1]}/${v.slice(1)}/${f}/${f}.mp3`; }
+    if (v[0] === '/') return CM + v;
+    return v;
+  };
+  const canTTS = 'speechSynthesis' in window;
+  const canSpeak = true;
   let voice = null;
-  function pickVoice() { const vs = speechSynthesis.getVoices(); voice = vs.find(v => /en-US/i.test(v.lang) && /Samantha|Google|Microsoft/i.test(v.name)) || vs.find(v => /^en/i.test(v.lang)) || null; }
-  if (canSpeak) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
-  function speak(w) {
-    if (!canSpeak) return;
-    speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(w); u.lang = 'en-US'; u.rate = .9; if (voice) u.voice = voice; speechSynthesis.speak(u);
+  function pickVoice() {
+    const vs = speechSynthesis.getVoices().filter(v => /^en[-_]/i.test(v.lang));
+    const score = v => {
+      let s = 0; const n = v.name;
+      if (/natural|neural|premium|enhanced|online/i.test(n)) s += 50;
+      if (/Google US English|Samantha|Ava|Allison|Aria|Jenny|Guy|Zoe|Nicky|Evan/i.test(n)) s += 30;
+      if (/en[-_]US/i.test(v.lang)) s += 20; else if (/en[-_](GB|AU|CA)/i.test(v.lang)) s += 8;
+      if (/compact|eloquence|novelty|whisper|bad news|bells|boing|bubbles|cellos|jester|organ|superstar|trinoids|wobble|zarvox|albert|fred|junior|ralph/i.test(n)) s -= 60;
+      return s;
+    };
+    voice = vs.sort((a, b) => score(b) - score(a))[0] || null;
   }
+  if (canTTS) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
+  function tts(w) {
+    if (!canTTS) return;
+    speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(w); u.lang = 'en-US'; u.rate = .85; if (voice) u.voice = voice; speechSynthesis.speak(u);
+  }
+  const player = new Audio(); player.preload = 'auto';
+  let speakId = 0;
+  function speak(w) {
+    const url = audioUrl(w), id = ++speakId;
+    if (canTTS) speechSynthesis.cancel();
+    if (!url) return tts(w);
+    player.pause(); player.src = url; player.currentTime = 0;
+    const fail = () => { if (id === speakId) tts(w); };
+    player.onerror = fail;
+    const p = player.play(); if (p && p.catch) p.catch(fail);
+  }
+  function stopSpeak() { speakId++; player.pause(); if (canTTS) speechSynthesis.cancel(); }
 
   // ── 화면 유틸
   const $ = s => document.querySelector(s);
@@ -209,7 +242,7 @@
   function root(view) { stack.length = 0; go(view); }
   function render() {
     const [view, args] = stack[stack.length - 1];
-    if (canSpeak) speechSynthesis.cancel();
+    stopSpeak();
     $('#backBtn').hidden = stack.length <= 1;
     document.querySelectorAll('.tabbar button').forEach(b => b.classList.toggle('on', b.dataset.tab === stack[0][0].tab));
     window.scrollTo(0, 0);
@@ -228,7 +261,7 @@
   const MODE_NAME = { intro: '✨ 새 단어', en: '🔤 뜻 고르기', ko: '🇰🇷 영어 고르기', listen: '🎧 듣고 고르기', spell: '✍️ 철자 쓰기' };
 
   function ask(host, o, mode, done) {
-    if (mode === 'listen' && !canSpeak) mode = 'en';
+    if (mode === 'listen' && !audioUrl(o.w) && !canTTS) mode = 'en';
     const finish = (ok, extra = '') => {
       onAnswer(ok, mode);
       if (ok) { const af = host.querySelector('.after'); if (af) af.innerHTML = `<p class="cheer">${pick(CHEER_OK)} ${comboHTML()}</p>`; setTimeout(() => done(true), mode === 'spell' ? 800 : 700); return; }
@@ -319,25 +352,29 @@
         <div class="stack-bar">${[3, 2, 1, 0].map(s => { const n = ordered.filter(o => stage(o.w) === s).length; return n ? `<i style="width:${n / total * 100}%;background:${STAGE_C[s]}"></i>` : ''; }).join('')}</div>
         <div class="legend">${[0, 1, 2, 3].map(s => `<span><i class="dot" style="background:${STAGE_C[s]}"></i>${STAGE[s]} ${ordered.filter(o => stage(o.w) === s).length}</span>`).join('')}</div>
         <p class="muted" style="margin:10px 0 0">단어를 맞힐 때마다 쑥쑥 자라요. 잊어버릴 때쯤 보키가 다시 물어봐 줄게요! (🌳 ${lt}그루)</p>
-      </section>
-      <section class="card">
-        <b>🎮 놀면서 외우기</b>
-        <div class="modes">${PRACTICE_MODES.map(m => `<button class="mode" data-m="${m.id}"><span>${m.icon}</span>${m.name}</button>`).join('')}</div>
       </section>`;
+    if (!S.alarm && !S.alarmAsked) {
+      S.alarmAsked = true; save();
+      setTimeout(() => {
+        const el = document.createElement('div'); el.className = 'pop';
+        el.innerHTML = `<div class="pop-card"><div class="pop-icon">⏰</div><b>매일 밤 알려 줄까?</b><p>밤 11시, 11시 30분에<br>보키가 휴대폰으로 알려 줄게!</p><button class="btn accent" id="ayes">좋아! 알림 켜기</button><button class="btn light" id="ano" style="margin-top:10px">나중에</button></div>`;
+        document.body.appendChild(el);
+        el.querySelector('#ayes').onclick = () => { el.remove(); addAlarm(); Today(); };
+        el.querySelector('#ano').onclick = () => el.remove();
+      }, 600);
+    }
     if (!S.alarm) { app.insertAdjacentHTML('beforeend', `<button class="alarm-tip" id="atip">⏰ 매일 밤 11시에 보키가 알려 줄까요? <b>알림 켜기 ›</b></button>`); $('#atip').onclick = () => root(Stats); }
     const st0 = $('#start'); if (st0) st0.onclick = () => go(Session, false);
     const mo = $('#more'); if (mo) mo.onclick = () => go(Session, true);
-    app.querySelectorAll('.mode').forEach(b => b.onclick = () => go(PracticeSource, b.dataset.m));
   }
   Today.tab = 'today';
 
   // ── 오늘의 학습 세션
   function reviewMode(o) {
     const b = card(o.w).b;
-    if (b <= 1) return 'en';
-    if (b === 2) return pick(['en', 'en', 'listen']);
-    if (b === 3) return pick(['en', 'ko', 'listen']);
-    if (b === 4) return pick(['ko', 'listen', 'spell']);
+    if (b <= 1) return pick(['en', 'en', 'listen']);
+    if (b === 2) return pick(['en', 'ko', 'listen']);
+    if (b === 3) return pick(['ko', 'listen', 'spell']);
     return pick(['spell', 'ko', 'listen']);
   }
   function Session(extra) {
@@ -355,7 +392,12 @@
     });
     while (ri < q.length) merged.push(q[ri++]);
     q = merged;
+    // 짝 맞추기 라운드: 중간에 한 번, 마지막에 한 번 (그때까지 나온 단어로)
+    const seen = [];
+    if (q.length >= 8) q.splice(Math.floor(q.length / 2), 0, { kind: 'match' });
+    if (q.length >= 4) q.push({ kind: 'match' });
     const total = q.length + news.length;
+    const matchWords = () => shuffle([...new Map(seen.map(o => [o.w, o])).values()].slice(-12)).slice(0, 6);
     let doneN = 0, okN = 0, ngN = 0; const wrongs = new Set(); combo = 0; let finished = false;
     if (!q.length) { app.innerHTML = `<div class="empty"><div style="font-size:44px">🎉</div><p>지금은 할 학습이 없어요.</p></div>`; return; }
 
@@ -363,6 +405,12 @@
       checkBadges();
       if (!q.length) return summary();
       const it = q.shift();
+      if (it.kind === 'match') {
+        const ws = matchWords();
+        if (ws.length < 4) { doneN++; return next(); }
+        return matchRound(ws, `<div class="progress-top"><span>${doneN} / ${total}</span><span>🧩 보너스 게임</span></div><div class="bar"><i style="width:${doneN / total * 100}%"></i></div>`, () => { doneN++; next(); });
+      }
+      if (it.o) seen.push(it.o);
       app.innerHTML = `<div class="progress-top"><span>${doneN} / ${total}</span><span><button class="toggle" id="quit">쉬었다 하기</button></span></div>
         <div class="bar"><i style="width:${doneN / total * 100}%"></i></div><div id="qhost" style="margin-top:12px"></div>`;
       $('#quit').onclick = summary;
@@ -399,6 +447,32 @@
       app.querySelectorAll('.say').forEach(b => b.onclick = () => speak(b.dataset.w));
     };
     next();
+  }
+
+
+  // 오늘의 미션 속 짝 맞추기 한 판
+  function matchRound(ws, head, done) {
+    const L = shuffle(ws), R = shuffle(ws); let sel = null, left = ws.length, miss = 0; const t0 = Date.now();
+    app.innerHTML = `${head}${boki('보너스 게임! 영어랑 뜻을 짝지어 줘 🧩', true)}
+      <div class="match"><div>${L.map(o => `<button class="tile en" data-w="${esc(o.w)}">${esc(o.w)}</button>`).join('')}</div>
+      <div>${R.map(o => `<button class="tile ko" data-w="${esc(o.w)}">${esc(o.m)}</button>`).join('')}</div></div>`;
+    app.querySelectorAll('.tile').forEach(t => t.onclick = () => {
+      if (t.classList.contains('gone')) return;
+      if (t.classList.contains('en')) speak(t.dataset.w);
+      if (!sel || sel.classList.contains(t.classList.contains('en') ? 'en' : 'ko')) { if (sel) sel.classList.remove('sel'); sel = t; t.classList.add('sel'); return; }
+      if (sel.dataset.w === t.dataset.w) {
+        [sel, t].forEach(x => { x.classList.remove('sel'); x.classList.add('gone'); }); sel = null; left--;
+        if (!left) {
+          const sec = Math.round((Date.now() - t0) / 1000), bonus = miss ? 5 : 10;
+          addXP(bonus); save();
+          app.insertAdjacentHTML('beforeend', `<div class="card center" style="margin-top:14px"><p class="cheer">${miss ? '다 맞췄다! 👏' : '실수 없이 완벽! 🌟'} ${sec}초 · ⭐+${bonus}</p><button class="btn" id="mdone" style="margin-top:12px">계속하기 ›</button></div>`);
+          $('#mdone').onclick = done;
+        }
+      } else {
+        miss++; const a = sel; sel = null;
+        [a, t].forEach(x => { x.classList.remove('sel'); x.classList.add('shake'); setTimeout(() => x.classList.remove('shake'), 400); });
+      }
+    });
   }
 
   // ── 자유 연습
@@ -584,6 +658,7 @@
       ${alarmCard()}
       <section class="card"><b>📱 홈 화면에 추가하기</b>
         <p class="muted" style="margin-bottom:0">앱처럼 쓰려면 브라우저 메뉴에서 '홈 화면에 추가'를 누르세요. (아이폰: 사파리 공유 버튼 → 홈 화면에 추가) 기록은 이 휴대폰 브라우저에 저장돼요.</p></section>
+      <p class="muted center" style="font-size:11.5px">발음 녹음: Free Dictionary API · Wiktionary (CC BY-SA)</p>
       <button class="danger" id="reset">처음부터 다시 하기 (기록 지우기)</button>`;
     $('#who').onclick = () => root(Who);
     $('#alarm').onclick = addAlarm;
