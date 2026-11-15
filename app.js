@@ -314,28 +314,91 @@
     const picks = []; for (const x of pool) { if (picks.length === 3) break; if (x[field] !== o[field] && !picks.some(p => p[field] === x[field])) picks.push(x); }
     return shuffle([o, ...picks]);
   }
-  const MODE_NAME = { intro: '✨ 새 단어', en: '🔤 뜻 고르기', ko: '🇰🇷 영어 고르기', listen: '🎧 듣고 고르기', spell: '✍️ 철자 쓰기' };
+  // ── 예문
+  const SN = typeof SENT === 'object' ? SENT : {};
+  const sentOf = w => SN[w] || null;
+  const plainSent = s => s.replace(/[\[\]]/g, '');
+  const sentHTML = (s, mode) => esc(s).replace(/\[([^\]]+)\]/, (_, x) => mode === 'blank' ? `<span class="blank">${'＿'.repeat(Math.min(6, Math.max(3, x.length - 2)))}</span>` : `<b class="hl">${x}</b>`);
+  function speakSent(s) { if (!canTTS) return; stopSpeak(); const u = new SpeechSynthesisUtterance(plainSent(s)); u.lang = 'en-US'; u.rate = .82; if (voice) u.voice = voice; speechSynthesis.speak(u); }
+  const sentBox = (o, small) => { const s = sentOf(o.w); if (!s) return ''; return `<div class="sentbox ${small ? 'small' : ''}"><button class="say ssay" data-s="${esc(s[0])}" aria-label="예문 듣기">🗣️</button><div><p class="en">${sentHTML(s[0])}</p><p class="ko">${esc(s[1])}</p></div></div>`; };
+  const bindSentSay = root => root.querySelectorAll('.ssay').forEach(b => b.onclick = e => { e.stopPropagation(); speakSent(b.dataset.s); });
+
+  const MODE_NAME = { intro: '✨ 새 단어', en: '🔤 뜻 고르기', ko: '🇰🇷 영어 고르기', listen: '🎧 듣고 고르기', spell: '✍️ 철자 쓰기', cloze: '📝 빈칸 채우기', order: '🧱 문장 만들기' };
 
   function ask(host, o, mode, done) {
     if (mode === 'listen' && !audioUrl(o.w) && !canTTS) mode = 'en';
+    const st0 = sentOf(o.w);
+    if ((mode === 'cloze' || mode === 'order') && !st0) mode = 'en';
+    if (mode === 'order' && plainSent(st0[0]).split(' ').length > 10) mode = 'cloze';
+    const isSent = mode === 'cloze' || mode === 'order';
     const finish = (ok, extra = '') => {
       onAnswer(ok, mode);
       fx(ok ? (combo >= 3 && combo % 5 === 0 ? 'combo' : 'ok') : 'ng');
+      if (ok && isSent) { const af = host.querySelector('.after'); af.innerHTML = `<p class="cheer">${pick(CHEER_OK)} ${comboHTML()}</p>${sentBox(o)}<button class="btn next" id="nx">다음 ›</button>`; bindSentSay(af); setTimeout(() => speakSent(st0[0]), 350); host.querySelector('#nx').onclick = () => done(true); return; }
       if (ok) { const af = host.querySelector('.after'); if (af) af.innerHTML = `<p class="cheer">${pick(CHEER_OK)} ${comboHTML()}</p>`; setTimeout(() => done(true), mode === 'spell' ? 800 : 700); return; }
-      host.querySelector('.after').innerHTML = `<p class="cheer ng">${pick(CHEER_NG)}</p><p class="answer">${esc(o.w)} = ${esc(o.m)}</p>${extra}<button class="btn next" id="nx">다음 ›</button>`;
+      host.querySelector('.after').innerHTML = `<p class="cheer ng">${pick(CHEER_NG)}</p><p class="answer">${esc(o.w)} = ${esc(o.m)}</p>${extra}${sentBox(o, true)}<button class="btn next" id="nx">다음 ›</button>`;
+      bindSentSay(host.querySelector('.after'));
       host.querySelector('#nx').onclick = () => done(false);
       host.querySelector('#nx').focus();
     };
     if (mode === 'intro') {
       host.innerHTML = `<div class="flash" id="card"><div class="inner">
           <div class="face"><span class="tag">✨ 새 단어</span><button class="say" id="say">🔊</button><div class="word">${esc(o.w)}</div><div class="hint">탭해서 뜻 보기</div></div>
-          <div class="face back"><span class="tag">✨ 새 단어</span><div class="word sm">${esc(o.w)}</div><div class="mean">${esc(o.m)}</div><div class="hint">소리 내어 3번 읽어 보세요</div></div>
+          <div class="face back"><span class="tag">✨ 새 단어</span><div class="word sm">${esc(o.w)}</div><div class="mean">${esc(o.m)}</div>${sentBox(o, true)}<div class="hint">예문도 소리 내어 읽어 보세요</div></div>
         </div></div><button class="btn" id="got">외웠어요 ›</button>`;
+      bindSentSay(host);
       const c = host.querySelector('#card');
-      c.onclick = e => { if (e.target.id !== 'say') { c.classList.toggle('flip'); fx('flip'); } };
+      c.onclick = e => { if (e.target.id !== 'say' && !e.target.closest('.ssay')) { const was = c.classList.contains('flip'); c.classList.toggle('flip'); fx('flip'); if (!was && st0) setTimeout(() => speakSent(st0[0]), 500); } };
       host.querySelector('#say').onclick = () => speak(o.w);
-      host.querySelector('#got').onclick = () => { if (!c.classList.contains('flip')) { c.classList.add('flip'); return; } done(true); };
+      host.querySelector('#got').onclick = () => { if (!c.classList.contains('flip')) { c.classList.add('flip'); if (st0) setTimeout(() => speakSent(st0[0]), 500); return; } done(true); };
       speak(o.w);
+      return;
+    }
+    if (mode === 'cloze') {
+      const opts = choicesFor(o, 'w');
+      host.innerHTML = `<span class="tag">${MODE_NAME.cloze}</span>
+        <div class="cloze"><p class="en">${sentHTML(st0[0], 'blank')}</p><p class="ko">${esc(st0[1])}</p></div>
+        <p class="q-pos">빈칸에 알맞은 단어는? (모양이 조금 바뀔 수 있어요)</p>
+        <div class="opts">${opts.map((x, n) => `<button class="opt" data-w="${esc(x.w)}"><span class="n">${n + 1}</span>${esc(x.w)}</button>`).join('')}</div>
+        <div class="after"></div>`;
+      host.querySelectorAll('.opt').forEach(b => b.onclick = () => {
+        const ok = b.dataset.w === o.w;
+        host.querySelectorAll('.opt').forEach(x => { x.disabled = true; if (x.dataset.w === o.w) x.classList.add('correct'); });
+        if (!ok) b.classList.add('wrong');
+        host.querySelector('.cloze .en').innerHTML = sentHTML(st0[0]);
+        finish(ok);
+      });
+      return;
+    }
+    if (mode === 'order') {
+      const target = plainSent(st0[0]).split(' ');
+      let pool = shuffle(target.map((t, i) => ({ t, i })));
+      if (pool.every((p, k) => p.i === k)) pool = pool.reverse();
+      const picked = [];
+      host.innerHTML = `<span class="tag">${MODE_NAME.order}</span>
+        <p class="order-ko">${esc(st0[1])}</p>
+        <div class="order-line" id="line"><span class="ph">아래 조각을 순서대로 눌러 문장을 만들어요</span></div>
+        <div class="order-pool" id="pool"></div>
+        <div class="btns" style="margin-top:12px" id="obtn"><button class="btn light" id="ogive">몰라요</button><button class="btn light" id="oreset">다시 놓기</button></div>
+        <div class="after"></div>`;
+      const line = host.querySelector('#line'), poolEl = host.querySelector('#pool');
+      const draw = () => {
+        line.innerHTML = picked.length ? picked.map((p, k) => `<button class="chipw on" data-k="${k}">${esc(p.t)}</button>`).join('') : '<span class="ph">아래 조각을 순서대로 눌러 문장을 만들어요</span>';
+        poolEl.innerHTML = pool.map((p, k) => `<button class="chipw ${p.used ? 'used' : ''}" data-k="${k}" ${p.used ? 'disabled' : ''}>${esc(p.t)}</button>`).join('');
+        line.querySelectorAll('.chipw').forEach(b => b.onclick = () => { const p = picked.splice(+b.dataset.k, 1)[0]; p.used = false; draw(); });
+        poolEl.querySelectorAll('.chipw').forEach(b => b.onclick = () => { const p = pool[+b.dataset.k]; p.used = true; picked.push(p); draw(); if (picked.length === target.length) check(false); });
+      };
+      const check = giveup => {
+        const ok = !giveup && picked.map(p => p.t).join(' ') === target.join(' ');
+        host.querySelector('#obtn').remove();
+        line.innerHTML = `<p class="en ${ok ? 'okline' : 'ngline'}">${sentHTML(st0[0])}</p>`;
+        poolEl.innerHTML = '';
+        if (!ok) speakSent(st0[0]);
+        finish(ok, giveup || !picked.length ? '' : `<p class="muted center">내 답: ${esc(picked.map(p => p.t).join(' '))}</p>`);
+      };
+      host.querySelector('#ogive').onclick = () => check(true);
+      host.querySelector('#oreset').onclick = () => { picked.length = 0; pool.forEach(p => p.used = false); draw(); };
+      draw();
       return;
     }
     if (mode === 'spell') {
@@ -474,7 +537,7 @@
     app.querySelectorAll('.node[data-l]').forEach(b => b.onclick = () => {
       const L = +b.dataset.l;
       if (L === curL) return startMission();
-      if (L < curL) { const ws = ordered.slice(L * LESSON, L * LESSON + LESSON); return go(PracticeSource, pick(['en', 'ko', 'listen', 'match']), ws, `레슨 ${L + 1} 복습`); }
+      if (L < curL) { const ws = ordered.slice(L * LESSON, L * LESSON + LESSON); return go(PracticeSource, pick(['en', 'ko', 'listen', 'match', 'cloze', 'order']), ws, `레슨 ${L + 1} 복습`); }
       fx('ng'); toast('🔒 앞 레슨을 끝내면 열려요!');
     });
     app.querySelectorAll('.node[data-chest]').forEach(b => b.onclick = () => {
@@ -545,10 +608,10 @@
   // ── 오늘의 학습 세션
   function reviewMode(o) {
     const b = card(o.w).b;
-    if (b <= 1) return pick(['en', 'en', 'listen']);
-    if (b === 2) return pick(['en', 'ko', 'listen']);
-    if (b === 3) return pick(['ko', 'listen', 'spell']);
-    return pick(['spell', 'ko', 'listen']);
+    if (b <= 1) return pick(['en', 'en', 'listen', 'cloze']);
+    if (b === 2) return pick(['en', 'ko', 'listen', 'cloze', 'cloze']);
+    if (b === 3) return pick(['ko', 'listen', 'spell', 'cloze', 'order']);
+    return pick(['spell', 'ko', 'order', 'order', 'cloze']);
   }
   function Session(extra, resume) {
     setTitle('오늘의 미션');
@@ -604,7 +667,7 @@
           doneN++; return next();
         }
         if (it.kind === 'check') {
-          if (ok) { learnNew(it.o.w); doneN++; okN++; }
+          if (ok) { learnNew(it.o.w); doneN++; okN++; q.splice(Math.min(4, q.length), 0, { o: it.o, mode: 'cloze', kind: 'extra' }); }
           else { ngN++; wrongs.add(it.o.w); q.splice(Math.min(4, q.length), 0, { o: it.o, mode: 'intro', kind: 'intro' }); doneN--; }
           return next();
         }
@@ -613,6 +676,7 @@
           if (ok) okN++; else { ngN++; wrongs.add(it.o.w); q.splice(Math.min(5, q.length), 0, { o: it.o, mode: 'en', kind: 'retry' }); }
           return next();
         }
+        if (it.kind === 'extra') return next();   // 예문 연습 (일정에는 영향 없음)
         // retry: 틀린 단어 다시 한 번 (일정에는 영향 없음)
         if (!ok) q.push({ o: it.o, mode: 'en', kind: 'retry' });
         next();
@@ -668,6 +732,8 @@
     { id: 'listen', icon: '🎧', name: '듣고 고르기' },
     { id: 'spell', icon: '✍️', name: '철자 쓰기' },
     { id: 'match', icon: '🧩', name: '짝 맞추기' },
+    { id: 'cloze', icon: '📝', name: '빈칸 채우기' },
+    { id: 'order', icon: '🧱', name: '문장 만들기' },
   ];
   function sources() {
     const L = learned();
@@ -796,12 +862,14 @@
       app.innerHTML = `<section class="card"><div class="row between"><span class="lvl">${setLevel(k)}</span><span class="muted">${list.filter(o => card(o.w)).length} / ${list.length}개 심음</span></div>
         <div class="modes" style="margin-top:12px">${PRACTICE_MODES.map(m => `<button class="mode" data-m="${m.id}"><span>${m.icon}</span>${m.name}</button>`).join('')}</div></section>
         <section class="card"><div class="row between" style="margin-bottom:4px"><b>단어 목록</b><button class="toggle" id="hide">${hideMean ? '뜻 보이기' : '뜻 가리기'}</button></div>
-        <ul class="wlist">${list.map(o => `<li><button class="say" data-w="${esc(o.w)}">🔊</button>${dot(o.w)}
-          <span class="w">${esc(o.w)}</span><span class="m ${hideMean ? 'hide' : ''}">${esc(o.m)}</span></li>`).join('')}</ul></section>`;
+        <ul class="wlist wl2">${list.map(o => { const s = sentOf(o.w); return `<li><button class="say" data-w="${esc(o.w)}">🔊</button>${dot(o.w)}
+          <span class="w">${esc(o.w)}</span><span class="m ${hideMean ? 'hide' : ''}">${esc(o.m)}</span>
+          ${s ? `<div class="wsent"><button class="ssay" data-s="${esc(s[0])}" aria-label="예문 듣기">🗣️</button><span><span class="en">${sentHTML(s[0])}</span><span class="ko ${hideMean ? 'hide' : ''}">${esc(s[1])}</span></span></div>` : ''}</li>`; }).join('')}</ul></section>`;
+      bindSentSay(app);
       app.querySelectorAll('.mode').forEach(b => b.onclick = () => go(PracticeSource, b.dataset.m, list, `세트 ${k + 1}`));
       $('#hide').onclick = () => { hideMean = !hideMean; draw(); };
       app.querySelectorAll('.say').forEach(b => b.onclick = () => speak(b.dataset.w));
-      app.querySelectorAll('.m.hide').forEach(m => m.onclick = () => m.classList.remove('hide'));
+      app.querySelectorAll('.m.hide, .ko.hide').forEach(m => m.onclick = () => m.classList.remove('hide'));
     };
     draw();
   }

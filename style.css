@@ -342,3 +342,34 @@ a.btn{text-decoration:none;box-sizing:border-box}
 .smsg.small{font-size:15px;color:var(--sub);margin-top:8px}
 .streak-screen .boki{justify-content:center;margin-top:22px}
 .sbtn{margin-top:20px;font-size:18px;padding:16px;background:#4aa8ff;box-shadow:0 5px 0 #2c86d8}
+
+/* ── 예문 */
+.hl{color:var(--navy);background:#f1edff;border-radius:6px;padding:0 4px}
+.blank{display:inline-block;min-width:64px;border-bottom:3px solid var(--navy2);color:transparent;margin:0 2px}
+.sentbox{display:flex;gap:10px;align-items:flex-start;text-align:left;background:#f7f4ff;border-radius:16px;padding:12px;margin:12px 0 4px}
+.sentbox .en{margin:0;font-size:17px;line-height:1.45;font-weight:600}
+.sentbox .ko{margin:4px 0 0;font-size:14px;color:var(--sub)}
+.sentbox.small .en{font-size:15px}.sentbox.small .ko{font-size:13px}
+.ssay{width:34px;height:34px;border-radius:50%;background:#fff;font-size:16px;flex:none;box-shadow:0 2px 0 #e6defc}
+.face .sentbox{margin:14px 0 0;width:100%;position:relative;z-index:2}
+.face.back{justify-content:flex-start;padding-top:44px;overflow:auto}
+.flash{height:340px}
+.cloze{background:#fff;border-radius:20px;padding:18px 16px;margin:16px 0 6px;box-shadow:0 3px 0 var(--line)}
+.cloze .en{font-size:21px;line-height:1.55;margin:0;font-weight:600}
+.cloze .ko{font-size:14.5px;color:var(--sub);margin:8px 0 0}
+.order-ko{font-size:18px;font-weight:700;text-align:center;margin:16px 4px 12px;line-height:1.5}
+.order-line{min-height:74px;background:#fff;border-radius:18px;padding:10px;display:flex;flex-wrap:wrap;gap:6px;align-content:flex-start;box-shadow:0 3px 0 var(--line);border:2px dashed #e3dcf7}
+.order-line .ph{color:#b9b3c9;font-size:13.5px;margin:auto}
+.order-line .en{margin:4px;font-size:19px;line-height:1.5;font-weight:600}
+.order-line .okline{color:var(--ok)}.order-line .ngline{color:var(--ink)}
+.order-pool{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:16px;min-height:10px}
+.chipw{background:#fff;border:2px solid #e3dcf7;border-radius:14px;padding:9px 13px;font-size:18px;font-weight:600;box-shadow:0 3px 0 #e3dcf7}
+.chipw.on{background:#f1edff;border-color:#cfc4ff}
+.chipw.used{visibility:hidden}
+.chipw:active{transform:translateY(2px)}
+.wl2 li{flex-wrap:wrap}
+.wsent{flex-basis:100%;display:flex;gap:8px;align-items:flex-start;padding:6px 0 0 42px}
+.wsent .ssay{width:28px;height:28px;font-size:13px}
+.wsent .en{display:block;font-size:14px;line-height:1.4}
+.wsent .ko{display:block;font-size:12.5px;color:var(--sub);margin-top:2px}
+.wsent .ko.hide{color:transparent;background:#eceae4;border-radius:6px}
